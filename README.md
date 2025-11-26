@@ -3,7 +3,7 @@
 Neo4j RAG (Retrieval-Augmented Generation) implementation using Drivine for the Embabel Agent framework.
 
 ## Overview
-
+  
 This module provides a Neo4j-based implementation of the RAG pattern using Drivine4j, a lightweight Neo4j driver for Java/Kotlin. It includes:
 
 - **CypherSearch**: Interface for executing Cypher queries and retrieving results
