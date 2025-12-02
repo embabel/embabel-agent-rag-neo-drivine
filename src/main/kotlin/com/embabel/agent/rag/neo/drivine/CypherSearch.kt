@@ -59,7 +59,7 @@ interface CypherSearch {
         query: String,
         params: Map<String, *>,
         logger: Logger?,
-    ): List<SimilarityResult<out Chunk>>
+    ): List<SimilarityResult<Chunk>>
 
     fun entityDataSimilaritySearch(
         purpose: String,

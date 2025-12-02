@@ -207,7 +207,7 @@ class DrivineStore(
     }
 
     fun search(ragRequest: RagRequest): RagFacetResults<Retrievable> {
-        val embedding = embeddingService.model.embed(ragRequest.query)
+        val embedding = embeddingFor(ragRequest.query)
         val allResults = mutableListOf<SimilarityResult<out Retrievable>>()
         if (ragRequest.contentElementSearch.types.contains(Chunk::class.java)) {
             allResults += safelyExecuteInTransaction { chunkSearch(ragRequest, embedding) }
@@ -271,11 +271,20 @@ class DrivineStore(
         }
     }
 
-    private fun chunkSearch(
+    internal fun chunkSearch(
         ragRequest: RagRequest,
         embedding: Embedding,
     ): List<SimilarityResult<out Chunk>> {
-        val chunkSimilarityResults = cypherSearch.chunkSimilaritySearch(
+        val chunkSimilarityResults = chunkSimilaritySearch(ragRequest, embedding)
+        val chunkFullTextResults = chunkFullTextSearch(ragRequest)
+        return chunkSimilarityResults + chunkFullTextResults
+    }
+
+    internal fun chunkSimilaritySearch(
+        ragRequest: RagRequest,
+        embedding: Embedding,
+    ): List<SimilarityResult< Chunk>> {
+        val results = cypherSearch.chunkSimilaritySearch(
             "Chunk similarity search",
             query = "chunk_vector_search",
             params = commonParameters(ragRequest) + mapOf(
@@ -284,9 +293,14 @@ class DrivineStore(
             ),
             logger = logger,
         )
-        logger.info("{} chunk similarity results for query '{}'", chunkSimilarityResults.size, ragRequest.query)
+        logger.info("{} chunk similarity results for query '{}'", results.size, ragRequest.query)
+        return results
+    }
 
-        val chunkFullTextResults = cypherSearch.chunkFullTextSearch(
+    internal fun chunkFullTextSearch(
+        ragRequest: RagRequest,
+    ): List<SimilarityResult<out Chunk>> {
+        val results = cypherSearch.chunkFullTextSearch(
             purpose = "Chunk full text search",
             query = "chunk_fulltext_search",
             params = commonParameters(ragRequest) + mapOf(
@@ -295,8 +309,8 @@ class DrivineStore(
             ),
             logger = logger,
         )
-        logger.info("{} chunk full-text results for query '{}'", chunkFullTextResults.size, ragRequest.query)
-        return chunkSimilarityResults + chunkFullTextResults
+        logger.info("{} chunk full-text results for query '{}'", results.size, ragRequest.query)
+        return results
     }
 
     private fun entitySearch(
