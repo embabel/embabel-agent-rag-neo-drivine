@@ -6,6 +6,7 @@ import com.embabel.agent.rag.model.*
 import com.embabel.agent.rag.neo.drivine.mappers.ContentElementMapper
 import com.embabel.agent.rag.service.EntitySearch
 import com.embabel.agent.rag.service.RagRequest
+import com.embabel.agent.rag.service.SearchPrimitives
 import com.embabel.agent.rag.service.support.FunctionRagFacet
 import com.embabel.agent.rag.service.support.RagFacet
 import com.embabel.agent.rag.service.support.RagFacetProvider
@@ -17,6 +18,7 @@ import com.embabel.common.ai.model.DefaultModelSelectionCriteria
 import com.embabel.common.ai.model.ModelProvider
 import com.embabel.common.core.types.SimilarityCutoff
 import com.embabel.common.core.types.SimilarityResult
+import com.embabel.common.core.types.TextSimilaritySearchRequest
 import org.drivine.manager.PersistenceManager
 import org.drivine.query.QuerySpecification
 import org.slf4j.LoggerFactory
@@ -35,7 +37,8 @@ class DrivineStore(
     private val contentElementMapper: ContentElementMapper,
     modelProvider: ModelProvider,
     platformTransactionManager: PlatformTransactionManager,
-) : AbstractChunkingContentElementRepository(properties), ChunkingContentElementRepository, RagFacetProvider {
+) : AbstractChunkingContentElementRepository(properties), ChunkingContentElementRepository, RagFacetProvider,
+    SearchPrimitives {
 
     private val logger = LoggerFactory.getLogger(DrivineStore::class.java)
 
@@ -173,7 +176,6 @@ class DrivineStore(
     }
 
     override fun findChunksForEntity(entityId: String): List<Chunk> {
-
         val statement = """
             MATCH (e:Entity {id: ${'$'}entityId})<-[:HAS_ENTITY]-(chunk:Chunk)
             RETURN properties(chunk)
@@ -271,7 +273,7 @@ class DrivineStore(
         }
     }
 
-    internal fun chunkSearch(
+    private fun chunkSearch(
         ragRequest: RagRequest,
         embedding: Embedding,
     ): List<SimilarityResult<out Chunk>> {
@@ -280,37 +282,66 @@ class DrivineStore(
         return chunkSimilarityResults + chunkFullTextResults
     }
 
-    internal fun chunkSimilaritySearch(
-        ragRequest: RagRequest,
+    override fun <T : Retrievable> vectorSearch(
+        request: TextSimilaritySearchRequest,
+        clazz: Class<T>
+    ): List<SimilarityResult<T>> {
+        if (clazz != Chunk::class.java) {
+            throw IllegalArgumentException("DrivineStore vectorSearch only supports Chunk class, got: $clazz")
+        }
+        @Suppress("UNCHECKED_CAST")
+        return chunkSimilaritySearch(
+            request,
+            embeddingFor(request.query),
+        ) as List<SimilarityResult<T>>
+    }
+
+    private fun chunkSimilaritySearch(
+        request: TextSimilaritySearchRequest,
         embedding: Embedding,
     ): List<SimilarityResult< Chunk>> {
         val results = cypherSearch.chunkSimilaritySearch(
             "Chunk similarity search",
             query = "chunk_vector_search",
-            params = commonParameters(ragRequest) + mapOf(
+            params = commonParameters(request) + mapOf(
                 "vectorIndex" to properties.contentElementIndex,
                 "queryVector" to embedding,
             ),
             logger = logger,
         )
-        logger.info("{} chunk similarity results for query '{}'", results.size, ragRequest.query)
+        logger.info("{} chunk similarity results for query '{}'", results.size, request.query)
         return results
     }
 
     internal fun chunkFullTextSearch(
-        ragRequest: RagRequest,
+        request: TextSimilaritySearchRequest,
     ): List<SimilarityResult<out Chunk>> {
         val results = cypherSearch.chunkFullTextSearch(
             purpose = "Chunk full text search",
             query = "chunk_fulltext_search",
-            params = commonParameters(ragRequest) + mapOf(
+            params = commonParameters(request) + mapOf(
                 "fulltextIndex" to properties.contentElementFullTextIndex,
-                "searchText" to "\"${ragRequest.query}\"",
+                "searchText" to "\"${request.query}\"",
             ),
             logger = logger,
         )
-        logger.info("{} chunk full-text results for query '{}'", results.size, ragRequest.query)
+        logger.info("{} chunk full-text results for query '{}'", results.size, request.query)
         return results
+    }
+
+    override fun <T : Retrievable> bmi25Search(
+        request: TextSimilaritySearchRequest,
+        clazz: Class<T>
+    ): List<SimilarityResult<T>> {
+        TODO()
+    }
+
+    override fun <T : Retrievable> regexSearch(
+        regex: Regex,
+        topK: Int,
+        clazz: Class<T>
+    ): List<SimilarityResult<T>> {
+        TODO("Not yet implemented")
     }
 
     private fun entitySearch(
