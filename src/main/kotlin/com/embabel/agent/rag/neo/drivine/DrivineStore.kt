@@ -329,11 +329,21 @@ class DrivineStore(
         return results
     }
 
-    override fun <T : Retrievable> bmi25Search(
+    override fun <T : Retrievable> textSearch(
         request: TextSimilaritySearchRequest,
         clazz: Class<T>
     ): List<SimilarityResult<T>> {
-        TODO()
+        val results = cypherSearch.chunkFullTextSearch(
+            purpose = "Chunk full text search",
+            query = "chunk_fulltext_search",
+            params = commonParameters(request) + mapOf(
+                "fulltextIndex" to properties.contentElementFullTextIndex,
+                "searchText" to request.query,
+            ),
+            logger = logger,
+        )
+        @Suppress("UNCHECKED_CAST")
+        return results as List<SimilarityResult<T>>
     }
 
     override fun <T : Retrievable> regexSearch(
