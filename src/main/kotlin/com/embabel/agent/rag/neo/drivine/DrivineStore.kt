@@ -7,7 +7,6 @@ import com.embabel.agent.rag.neo.drivine.mappers.ContentElementMapper
 import com.embabel.agent.rag.service.CoreSearchOperations
 import com.embabel.agent.rag.service.EntitySearch
 import com.embabel.agent.rag.service.RagRequest
-import com.embabel.agent.rag.service.SearchPrimitives
 import com.embabel.agent.rag.service.support.FunctionRagFacet
 import com.embabel.agent.rag.service.support.RagFacet
 import com.embabel.agent.rag.service.support.RagFacetProvider
