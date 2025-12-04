@@ -4,6 +4,7 @@ import com.embabel.agent.api.common.Embedding
 import com.embabel.agent.rag.ingestion.RetrievableEnhancer
 import com.embabel.agent.rag.model.*
 import com.embabel.agent.rag.neo.drivine.mappers.ContentElementMapper
+import com.embabel.agent.rag.service.CoreSearchOperations
 import com.embabel.agent.rag.service.EntitySearch
 import com.embabel.agent.rag.service.RagRequest
 import com.embabel.agent.rag.service.SearchPrimitives
@@ -38,7 +39,7 @@ class DrivineStore(
     modelProvider: ModelProvider,
     platformTransactionManager: PlatformTransactionManager,
 ) : AbstractChunkingContentElementRepository(properties), ChunkingContentElementRepository, RagFacetProvider,
-    SearchPrimitives {
+    CoreSearchOperations {
 
     private val logger = LoggerFactory.getLogger(DrivineStore::class.java)
 
