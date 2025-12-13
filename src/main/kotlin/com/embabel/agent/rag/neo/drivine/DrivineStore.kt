@@ -46,6 +46,8 @@ class DrivineStore(
 
     override val name get() = properties.name
 
+    override val luceneSyntaxNotes = "Full support"
+
     override fun provision() {
         logger.info("Provisioning with properties {}", properties)
         // TODO do we want this on ContentElement?
