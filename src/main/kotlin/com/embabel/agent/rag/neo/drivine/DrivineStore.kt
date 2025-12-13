@@ -40,8 +40,6 @@ class DrivineStore(
 ) : AbstractChunkingContentElementRepository(properties), ChunkingContentElementRepository, RagFacetProvider,
     CoreSearchOperations {
 
-    private val logger = LoggerFactory.getLogger(DrivineStore::class.java)
-
     private val embeddingService = modelProvider.getEmbeddingService(DefaultModelSelectionCriteria)
 
     override val name get() = properties.name
