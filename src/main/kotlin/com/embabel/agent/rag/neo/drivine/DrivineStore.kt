@@ -4,6 +4,7 @@ import com.embabel.agent.api.common.Embedding
 import com.embabel.agent.rag.ingestion.RetrievableEnhancer
 import com.embabel.agent.rag.model.*
 import com.embabel.agent.rag.neo.drivine.mappers.ContentElementMapper
+import com.embabel.agent.rag.service.ChunkExpander
 import com.embabel.agent.rag.service.CoreSearchOperations
 import com.embabel.agent.rag.service.EntitySearch
 import com.embabel.agent.rag.service.RagRequest
@@ -38,7 +39,7 @@ class DrivineStore(
     modelProvider: ModelProvider,
     platformTransactionManager: PlatformTransactionManager,
 ) : AbstractChunkingContentElementRepository(properties), ChunkingContentElementRepository, RagFacetProvider,
-    CoreSearchOperations {
+    CoreSearchOperations, ChunkExpander {
 
     private val embeddingService = modelProvider.getEmbeddingService(DefaultModelSelectionCriteria)
 
@@ -60,7 +61,7 @@ class DrivineStore(
         // TODO may need to do this?
     }
 
-    override fun createRelationships(root: NavigableDocument) {
+    override fun createInternalRelationships(root: NavigableDocument) {
         println("TODO: createRelationships not yet implemented")
     }
 
@@ -150,6 +151,14 @@ class DrivineStore(
                 cypher,
             )
         }
+    }
+
+    override fun expandChunk(
+        chunkId: String,
+        method: ChunkExpander.Method,
+        chunksToAdd: Int
+    ): List<Chunk> {
+        TODO("Not yet implemented")
     }
 
     override fun count(): Int {
