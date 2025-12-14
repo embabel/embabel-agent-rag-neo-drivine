@@ -4,10 +4,10 @@ import com.embabel.agent.api.common.Embedding
 import com.embabel.agent.rag.ingestion.RetrievableEnhancer
 import com.embabel.agent.rag.model.*
 import com.embabel.agent.rag.neo.drivine.mappers.ContentElementMapper
-import com.embabel.agent.rag.service.ChunkExpander
 import com.embabel.agent.rag.service.CoreSearchOperations
 import com.embabel.agent.rag.service.EntitySearch
 import com.embabel.agent.rag.service.RagRequest
+import com.embabel.agent.rag.service.ResultExpander
 import com.embabel.agent.rag.service.support.FunctionRagFacet
 import com.embabel.agent.rag.service.support.RagFacet
 import com.embabel.agent.rag.service.support.RagFacetProvider
@@ -39,7 +39,7 @@ class DrivineStore(
     modelProvider: ModelProvider,
     platformTransactionManager: PlatformTransactionManager,
 ) : AbstractChunkingContentElementRepository(properties), ChunkingContentElementRepository, RagFacetProvider,
-    CoreSearchOperations, ChunkExpander {
+    CoreSearchOperations, ResultExpander {
 
     private val embeddingService = modelProvider.getEmbeddingService(DefaultModelSelectionCriteria)
 
@@ -153,11 +153,11 @@ class DrivineStore(
         }
     }
 
-    override fun expandChunk(
-        chunkId: String,
-        method: ChunkExpander.Method,
-        chunksToAdd: Int
-    ): List<Chunk> {
+    override fun expandResult(
+        id: String,
+        method: ResultExpander.Method,
+        elementsToAdd: Int
+    ): List<ContentElement> {
         TODO("Not yet implemented")
     }
 
