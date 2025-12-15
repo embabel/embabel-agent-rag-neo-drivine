@@ -355,14 +355,6 @@ class DrivineStore(
         return results as List<SimilarityResult<T>>
     }
 
-    override fun <T : Retrievable> regexSearch(
-        regex: Regex,
-        topK: Int,
-        clazz: Class<T>
-    ): List<SimilarityResult<T>> {
-        TODO("Not yet implemented")
-    }
-
     private fun entitySearch(
         ragRequest: RagRequest,
         embedding: FloatArray,
