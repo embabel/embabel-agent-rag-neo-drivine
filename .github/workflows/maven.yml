@@ -35,18 +35,12 @@ jobs:
         env:
           SKIP_TESTCONTAINER_TESTS: true  # Do not run TestContainer Tests in Windows Matrix Build.
         run: mvn -U -B test verify
-      - name: Linux-specific setup and SonarCloud analysis
+      - name: Linux-specific setup
         if: matrix.os == 'ubuntu-latest'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           # Configure Testcontainers for Linux
           mkdir -p /home/runner
           echo "testcontainers.reuse.enable=true" > /home/runner/.testcontainers.properties
-
-          # Run SonarCloud analysis
-          mvn -P jacoco-code-coverage -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=embabel_embabel-rag-neo-drivine
 
   build-fork: #for public forks
     runs-on: ubuntu-latest
