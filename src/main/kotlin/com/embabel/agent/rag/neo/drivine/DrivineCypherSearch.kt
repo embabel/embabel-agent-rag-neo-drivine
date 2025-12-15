@@ -206,39 +206,40 @@ class DrivineCypherSearch(
 
     @Transactional(readOnly = true)
     override fun <E> findClusters(opts: ClusterRetrievalRequest<E>): List<Cluster<E>> {
-        val labels = opts.entitySearch?.labels?.toList() ?: error("Must specify labels in entity search for clustering")
-        val params = mapOf(
-            "labels" to labels,
-            "vectorIndex" to opts.vectorIndex,
-            "similarityThreshold" to opts.similarityThreshold,
-            "topK" to opts.topK,
-        )
-        val result = query(
-            purpose = "cluster",
-            query = "vector_cluster",
-            params = params,
-        )
-        return result.map { row ->
-            val anchorMap = row["anchor"] as? Map<String, *> ?: error("Expected anchor in row")
-            val anchor = contentElementMapper.map(anchorMap) as E
-
-            val similar = row["similar"] as? List<*> ?: emptyList<E>()
-            val similarityResults = similar.mapNotNull { similarItem ->
-                try {
-                    val similarMap = similarItem as? Map<*, *> ?: return@mapNotNull null
-                    val matchMap = similarMap["match"] as? Map<String, *> ?: return@mapNotNull null
-                    val score = similarMap["score"] as? Double ?: return@mapNotNull null
-
-                    val matchElement = contentElementMapper.map(matchMap)
-                    val match = matchElement as E
-                    logger.debug("Found match: {} with score {}", matchElement.id, "%.2f".format(score))
-                    SimpleSimilaritySearchResult(match, score) as SimilarityResult<E>
-                } catch (e: Exception) {
-                    logger.warn("Could not map similar item: {}", similarItem, e)
-                    null
-                }
-            }
-            Cluster(anchor, similarityResults)
-        }
+//        val labels = opts.entitySearch?.labels?.toList() ?: error("Must specify labels in entity search for clustering")
+//        val params = mapOf(
+//            "labels" to labels,
+//            "vectorIndex" to opts.vectorIndex,
+//            "similarityThreshold" to opts.similarityThreshold,
+//            "topK" to opts.topK,
+//        )
+//        val result = query(
+//            purpose = "cluster",
+//            query = "vector_cluster",
+//            params = params,
+//        )
+//        return result.map { row ->
+//            val anchorMap = row["anchor"] as? Map<String, *> ?: error("Expected anchor in row")
+//            val anchor = contentElementMapper.map(anchorMap) as E
+//
+//            val similar = row["similar"] as? List<*> ?: emptyList<E>()
+//            val similarityResults = similar.mapNotNull { similarItem ->
+//                try {
+//                    val similarMap = similarItem as? Map<*, *> ?: return@mapNotNull null
+//                    val matchMap = similarMap["match"] as? Map<String, *> ?: return@mapNotNull null
+//                    val score = similarMap["score"] as? Double ?: return@mapNotNull null
+//
+//                    val matchElement = contentElementMapper.map(matchMap)
+//                    val match = matchElement as E
+//                    logger.debug("Found match: {} with score {}", matchElement.id, "%.2f".format(score))
+//                    SimpleSimilaritySearchResult(match, score) as SimilarityResult<E>
+//                } catch (e: Exception) {
+//                    logger.warn("Could not map similar item: {}", similarItem, e)
+//                    null
+//                }
+//            }
+//            Cluster(anchor, similarityResults)
+//        }
+        TODO()
     }
 }

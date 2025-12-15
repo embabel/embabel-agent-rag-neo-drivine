@@ -125,30 +125,39 @@ class DrivineStore(
     private fun embedRetrievable(
         retrievable: Retrievable,
     ) {
-        val embedding = embeddingFor(retrievable.embeddableValue())
-        val cypher = """
+        try {
+            val embedding = embeddingFor(retrievable.embeddableValue())
+            val cypher = """
                 MERGE (n:${retrievable.labels().joinToString(":")} {id: ${'$'}id})
                 SET n.embedding = ${'$'}embedding,
                  n.embeddingModel = ${'$'}embeddingModel,
                  n.embeddedAt = timestamp()
                 RETURN {nodesUpdated: COUNT(n) }
                """.trimIndent()
-        val params = mapOf(
-            "id" to retrievable.id,
-            "embedding" to embedding,
-            "embeddingModel" to embeddingService.name,
-        )
-        val result = cypherSearch.query(
-            purpose = "embedding",
-            query = cypher,
-            params = params,
-        )
-        val nodesUpdated = result.numberOrZero<Int>("nodesUpdated")
-        if (nodesUpdated == 0) {
+            val params = mapOf(
+                "id" to retrievable.id,
+                "embedding" to embedding,
+                "embeddingModel" to embeddingService.name,
+            )
+            val result = cypherSearch.query(
+                purpose = "embedding",
+                query = cypher,
+                params = params,
+            )
+            val nodesUpdated = result.numberOrZero<Int>("nodesUpdated")
+            if (nodesUpdated == 0) {
+                logger.warn(
+                    "Expected to set embedding properties, but set 0. chunkId={}, cypher={}",
+                    retrievable.id,
+                    cypher,
+                )
+            }
+        } catch (e: Exception) {
             logger.warn(
-                "Expected to set embedding properties, but set 0. chunkId={}, cypher={}",
+                "Unable to generate embedding for retrievable id='{}': {}",
                 retrievable.id,
-                cypher,
+                e.message,
+                e,
             )
         }
     }
