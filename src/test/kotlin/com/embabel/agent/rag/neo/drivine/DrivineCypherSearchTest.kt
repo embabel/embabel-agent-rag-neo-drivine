@@ -3,8 +3,6 @@ package com.embabel.agent.rag.neo.drivine
 import com.embabel.agent.rag.model.Chunk
 import com.embabel.agent.rag.model.ContentElement
 import com.embabel.agent.rag.service.ClusterRetrievalRequest
-import com.embabel.agent.rag.service.ContentElementSearch
-import com.embabel.agent.rag.service.EntitySearch
 import com.embabel.agent.rag.neo.drivine.test.Neo4jPropertiesInitializer
 import com.embabel.agent.rag.neo.drivine.test.TestAppContext
 import org.drivine.manager.PersistenceManager
@@ -26,7 +24,6 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.ContextConfiguration
 import java.util.*
 
-@Disabled("Temporarily disabled for CI/CD")
 @SpringBootTest(classes = [TestAppContext::class])
 @AutoConfigureMockMvc
 @ContextConfiguration(initializers = [Neo4jPropertiesInitializer::class])
@@ -155,6 +152,7 @@ class DrivineCypherSearchTest(
         }
 
         @Test
+        @Disabled("Currently in flux")
         fun `should find clusters` () {
             // Verify test data was created
             val chunkCountQuery = "MATCH (c:Chunk) WHERE c.id STARTS WITH 'test-chunk-' RETURN {count: count(c)} AS result"
@@ -172,9 +170,7 @@ class DrivineCypherSearchTest(
             val request = ClusterRetrievalRequest<Chunk>(
                 vectorIndex = properties.contentElementIndex,
                 topK = 5,
-                similarityThreshold = 0.7,
-                entitySearch = EntitySearch(labels = setOf("Chunk")),
-                contentElementSearch = ContentElementSearch(types = listOf(Chunk::class.java))
+                similarityThreshold = 0.7
             )
 
             val clusters = search.findClusters(request)
