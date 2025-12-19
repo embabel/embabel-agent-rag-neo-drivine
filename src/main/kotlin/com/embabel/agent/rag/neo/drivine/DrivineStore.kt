@@ -93,6 +93,19 @@ class DrivineStore(
         }
     }
 
+    override fun existsRootWithUri(uri: String): Boolean {
+        val statement =
+            "MATCH(c) WHERE c.uri = \$uri AND ('Document' IN labels(c) OR 'ContentRoot' IN labels(c)) RETURN COUNT(c) AS count"
+        val parameters = mapOf("uri" to uri)
+        return try {
+            val count = cypherSearch.queryForInt(statement, parameters)
+            count > 0
+        } catch (e: Exception) {
+            logger.error("Error checking existence of root with URI: {}", uri, e)
+            false
+        }
+    }
+
     override fun findContentRootByUri(uri: String): ContentRoot? {
         logger.debug("Finding root document with URI: {}", uri)
 
