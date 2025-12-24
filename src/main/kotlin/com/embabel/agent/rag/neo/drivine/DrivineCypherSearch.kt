@@ -1,6 +1,9 @@
 package com.embabel.agent.rag.neo.drivine
 
-import com.embabel.agent.rag.model.*
+import com.embabel.agent.rag.model.Chunk
+import com.embabel.agent.rag.model.EntityData
+import com.embabel.agent.rag.model.NamedEntityData
+import com.embabel.agent.rag.model.Retrievable
 import com.embabel.agent.rag.neo.drivine.mappers.ChunkSimilarityMapper
 import com.embabel.agent.rag.neo.drivine.mappers.ContentElementMapper
 import com.embabel.agent.rag.neo.drivine.mappers.EntityDataMapper
@@ -9,10 +12,8 @@ import com.embabel.agent.rag.service.Cluster
 import com.embabel.agent.rag.service.ClusterFinder
 import com.embabel.agent.rag.service.ClusterRetrievalRequest
 import com.embabel.common.core.types.SimilarityResult
-import com.embabel.common.core.types.SimpleSimilaritySearchResult
 import org.drivine.manager.PersistenceManager
 import org.drivine.query.QuerySpecification
-import org.drivine.utils.ObjectUtils
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -74,12 +75,10 @@ class DrivineCypherSearch(
         val cypher = if (query.contains(" ")) query else queryResolver.resolve(query)!!
         loggerToUse.info("[{}] query\n\tparams: {}\n{}", purpose, params, cypher)
 
-        val parameters = ObjectUtils.primitiveProps(params)
-
         return persistenceManager.query(
             QuerySpecification
                 .withStatement(cypher)
-                .bind(parameters)
+                .bind(params)
                 .mapWith(entityDataMapper)
         )
     }
@@ -94,12 +93,11 @@ class DrivineCypherSearch(
         val cypher = if (query.contains(" ")) query else queryResolver.resolve(query)!!
         loggerToUse.info("[{}] query\n\tparams: {}\n{}", purpose, params, cypher)
 
-        val parameters = ObjectUtils.primitiveProps(params)
 
         return persistenceManager.query(
             QuerySpecification
                 .withStatement(cypher)
-                .bind(parameters)
+                .bind(params)
                 .mapWith(entityDataSimilarityMapper)
         )
     }
@@ -114,12 +112,10 @@ class DrivineCypherSearch(
         val cypher = if (query.contains(" ")) query else queryResolver.resolve(query)!!
         loggerToUse.info("[{}] query\n\tparams: {}\n{}", purpose, params, cypher)
 
-        val parameters = ObjectUtils.primitiveProps(params)
-
         return persistenceManager.query(
             QuerySpecification
                 .withStatement(cypher)
-                .bind(parameters)
+                .bind(params)
                 .mapWith(chunkSimilarityMapper)
         )
     }
@@ -134,12 +130,10 @@ class DrivineCypherSearch(
         val cypher = if (query.contains(" ")) query else queryResolver.resolve(query)!!
         loggerToUse.info("[{}] query\n\tparams: {}\n{}", purpose, params, cypher)
 
-        val parameters = ObjectUtils.primitiveProps(params)
-
         return persistenceManager.query(
             QuerySpecification
                 .withStatement(cypher)
-                .bind(parameters)
+                .bind(params)
                 .mapWith(chunkSimilarityMapper)
         )
     }
@@ -154,12 +148,10 @@ class DrivineCypherSearch(
         val cypher = if (query.contains(" ")) query else queryResolver.resolve(query)!!
         loggerToUse.info("[{}] query\n\tparams: {}\n{}", purpose, params, cypher)
 
-        val parameters = ObjectUtils.primitiveProps(params)
-
         return persistenceManager.query(
             QuerySpecification
                 .withStatement(cypher)
-                .bind(parameters)
+                .bind(params)
                 .mapWith(entityDataSimilarityMapper)
         )
     }
@@ -177,13 +169,11 @@ class DrivineCypherSearch(
         val cypher = if (query.contains(" ")) query else queryResolver.resolve(query)!!
         loggerToUse.info("[{}] query\n\tparams: {}\n{}", purpose, params, cypher)
 
-        val parameters = ObjectUtils.primitiveProps(params)
-
         @Suppress("UNCHECKED_CAST")
         val rows = persistenceManager.query(
             QuerySpecification
                 .withStatement(cypher)
-                .bind(parameters)
+                .bind(params)
                 .transform(Map::class.java)
         ) as List<Map<String, Any>>
 

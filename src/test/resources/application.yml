@@ -1,0 +1,43 @@
+# Configuration for RAG Test Shell Application
+# Override with environment variables: NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, OPENAI_API_KEY
+
+spring:
+  main:
+    banner-mode: off
+  shell:
+    interactive:
+      enabled: true
+    command:
+      version:
+        enabled: false
+
+# Neo4j RAG configuration
+embabel:
+  agent:
+    rag:
+      neo:
+        uri: ${NEO4J_URI:bolt://localhost:7687}
+        username: ${NEO4J_USERNAME:neo4j}
+        password: ${NEO4J_PASSWORD:brahmsian}
+        content-element-index: embabel-content-index
+        entity-index: embabel-entity-index
+        content-element-full-text-index: embabel-content-fulltext-index
+        entity-full-text-index: embabel-entity-fulltext-index
+        chunk-node-name: Chunk
+        entity-node-name: Entity
+        max-chunk-size: 1500
+        overlap-size: 200
+  models:
+    default-embedding-model: text-embedding-3-small
+
+# RAG Test Application settings
+rag-test:
+  chat-llm:
+    model: gpt-4o-mini
+
+logging:
+  level:
+    root: WARN
+    com.embabel: INFO
+    org.drivine: INFO
+    org.springframework.shell: WARN

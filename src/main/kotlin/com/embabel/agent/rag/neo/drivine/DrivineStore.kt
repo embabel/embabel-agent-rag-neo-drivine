@@ -4,6 +4,7 @@ import com.embabel.agent.api.common.Embedding
 import com.embabel.agent.rag.ingestion.RetrievableEnhancer
 import com.embabel.agent.rag.model.*
 import com.embabel.agent.rag.neo.drivine.mappers.ContentElementMapper
+import com.embabel.agent.rag.neo.drivine.model.ContentElementRepositoryInfoImpl
 import com.embabel.agent.rag.service.CoreSearchOperations
 import com.embabel.agent.rag.service.EntitySearch
 import com.embabel.agent.rag.service.RagRequest
@@ -14,6 +15,7 @@ import com.embabel.agent.rag.service.support.RagFacetProvider
 import com.embabel.agent.rag.service.support.RagFacetResults
 import com.embabel.agent.rag.store.AbstractChunkingContentElementRepository
 import com.embabel.agent.rag.store.ChunkingContentElementRepository
+import com.embabel.agent.rag.store.ContentElementRepositoryInfo
 import com.embabel.agent.rag.store.DocumentDeletionResult
 import com.embabel.common.ai.model.DefaultModelSelectionCriteria
 import com.embabel.common.ai.model.ModelProvider
@@ -183,8 +185,32 @@ class DrivineStore(
         TODO("Not yet implemented")
     }
 
-    override fun count(): Int {
-        return cypherSearch.queryForInt("MATCH (c:ContentElement) RETURN count(c) AS count")
+    override fun info(): ContentElementRepositoryInfo {
+        val statement = """
+            CALL {
+              MATCH (c:Chunk)
+              RETURN count(c) AS chunkCount
+            }
+            CALL {
+              MATCH (d:Document)
+              RETURN count(d) AS documentCount
+            }
+            CALL {
+              MATCH (e:ContentElement)
+              RETURN count(e) AS contentElementCount
+            }
+            RETURN {
+              chunkCount: chunkCount,
+              documentCount: documentCount,
+              contentElementCount: contentElementCount
+            } AS stats
+        """.trimIndent()
+
+        val results = persistenceManager.getOne(
+            QuerySpecification.withStatement(statement)
+                .transform(ContentElementRepositoryInfoImpl::class.java)
+        )
+        return results
     }
 
     override fun findAllChunksById(chunkIds: List<String>): Iterable<Chunk> {
@@ -330,7 +356,7 @@ class DrivineStore(
     private fun chunkSimilaritySearch(
         request: TextSimilaritySearchRequest,
         embedding: Embedding,
-    ): List<SimilarityResult< Chunk>> {
+    ): List<SimilarityResult<Chunk>> {
         val results = cypherSearch.chunkSimilaritySearch(
             "Chunk similarity search",
             query = "chunk_vector_search",

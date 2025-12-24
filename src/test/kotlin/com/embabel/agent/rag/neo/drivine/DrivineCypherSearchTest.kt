@@ -5,6 +5,7 @@ import com.embabel.agent.rag.model.ContentElement
 import com.embabel.agent.rag.service.ClusterRetrievalRequest
 import com.embabel.agent.rag.neo.drivine.test.Neo4jPropertiesInitializer
 import com.embabel.agent.rag.neo.drivine.test.TestAppContext
+import com.embabel.common.ai.model.ModelProvider
 import org.drivine.manager.PersistenceManager
 import org.drivine.query.QuerySpecification
 import org.junit.jupiter.api.AfterEach
@@ -22,17 +23,26 @@ import org.springframework.boot.autoconfigure.ImportAutoConfiguration
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.ContextConfiguration
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import java.util.*
 
 @SpringBootTest(classes = [TestAppContext::class])
 @AutoConfigureMockMvc
 @ContextConfiguration(initializers = [Neo4jPropertiesInitializer::class])
 @ImportAutoConfiguration(exclude = [McpClientAutoConfiguration::class])
-class DrivineCypherSearchTest(
-    @Autowired private val search: DrivineCypherSearch,
-    @Autowired private val properties: NeoRagServiceProperties,
-    @Autowired @Qualifier("neo") private val persistenceManager: PersistenceManager
-) {
+class DrivineCypherSearchTest {
+    @MockitoBean
+    lateinit var modelProvider: ModelProvider
+
+    @Autowired
+    lateinit var search: DrivineCypherSearch
+
+    @Autowired
+    lateinit var properties: NeoRagServiceProperties
+
+    @Autowired
+    @Qualifier("neo")
+    lateinit var persistenceManager: PersistenceManager
 
     @Nested
     inner class CrudTests {
@@ -40,7 +50,7 @@ class DrivineCypherSearchTest(
         @BeforeEach
         fun setup() {
             val spec = QuerySpecification.withStatement("""
-                CREATE (n:Foobar {foo: "foo"})
+                MERGE (n:Foobar {foo: "foo"})
             """.trimIndent())
             persistenceManager.execute(spec)
         }

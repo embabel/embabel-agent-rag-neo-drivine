@@ -19,7 +19,6 @@ import com.embabel.agent.rag.neo.drivine.NeoRagServiceProperties
 import org.drivine.connection.ConnectionProperties
 import org.drivine.connection.DataSourceMap
 import org.drivine.connection.DatabaseType
-import org.drivine.connection.PropertyProvidedDataSourceMap
 import org.drivine.manager.PersistenceManager
 import org.drivine.manager.PersistenceManagerFactory
 import org.springframework.boot.context.properties.EnableConfigurationProperties
@@ -29,9 +28,11 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.ComponentScan
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.EnableAspectJAutoProxy
-import org.springframework.context.annotation.Profile
+import org.springframework.context.annotation.FilterType
 import org.springframework.context.annotation.PropertySource
 import org.springframework.core.env.MapPropertySource
+import org.drivine.autoconfigure.DrivinePropertiesConfiguration
+import org.drivine.autoconfigure.DrivineTestConfiguration
 
 /**
  * Initializer that configures Neo4j properties before Spring context starts.
@@ -88,8 +89,14 @@ class Neo4jPropertiesInitializer : ApplicationContextInitializer<ConfigurableApp
 @ComponentScan(
     basePackages = ["org.drivine", "com.embabel.agent.rag.neo.drivine"],
     excludeFilters = [ComponentScan.Filter(
-        type = org.springframework.context.annotation.FilterType.ASSIGNABLE_TYPE,
-        classes = [com.embabel.agent.rag.neo.drivine.DrivineStore::class]
+        type = FilterType.ASSIGNABLE_TYPE,
+        classes = [
+            DrivinePropertiesConfiguration::class,
+            DrivineTestConfiguration::class,
+            RagTestShellApplication::class,
+            RagShellCommands::class,
+            RagChatActions::class
+        ]
     )]
 )
 @EnableAspectJAutoProxy(proxyTargetClass = true)

@@ -48,8 +48,8 @@
         <!-- Drivine4j -->
         <dependency>
             <groupId>org.drivine</groupId>
-            <artifactId>drivine4j</artifactId>
-            <version>0.0.2</version>
+            <artifactId>drivine4j-spring-boot-starter</artifactId>
+            <version>0.0.4</version>
         </dependency>
 
         <!-- Spring Boot -->
@@ -113,6 +113,22 @@
         <dependency>
             <groupId>com.embabel.agent</groupId>
             <artifactId>embabel-agent-test</artifactId>
+            <version>${embabel-agent.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Embabel Agent Shell Starter for interactive test app with chat -->
+        <dependency>
+            <groupId>com.embabel.agent</groupId>
+            <artifactId>embabel-agent-starter-shell</artifactId>
+            <version>${embabel-agent.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- OpenAI for LLM and embeddings -->
+        <dependency>
+            <groupId>com.embabel.agent</groupId>
+            <artifactId>embabel-agent-starter-openai</artifactId>
             <version>${embabel-agent.version}</version>
             <scope>test</scope>
         </dependency>
