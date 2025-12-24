@@ -1,6 +1,5 @@
 package com.embabel.agent.rag.neo.drivine
 
-import com.embabel.agent.rag.neo.drivine.test.Neo4jPropertiesInitializer
 import com.embabel.agent.rag.neo.drivine.test.TestAppContext
 import com.embabel.common.ai.model.ModelProvider
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -10,10 +9,8 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.bean.override.mockito.MockitoBean
-import org.springframework.test.context.ContextConfiguration
 
 @SpringBootTest(classes = [TestAppContext::class])
-@ContextConfiguration(initializers = [Neo4jPropertiesInitializer::class])
 @ImportAutoConfiguration(exclude = [McpClientAutoConfiguration::class])
 class DrivineStoreTest {
     @MockitoBean

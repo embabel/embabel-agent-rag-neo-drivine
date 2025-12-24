@@ -3,7 +3,6 @@ package com.embabel.agent.rag.neo.drivine
 import com.embabel.agent.rag.model.Chunk
 import com.embabel.agent.rag.model.ContentElement
 import com.embabel.agent.rag.service.ClusterRetrievalRequest
-import com.embabel.agent.rag.neo.drivine.test.Neo4jPropertiesInitializer
 import com.embabel.agent.rag.neo.drivine.test.TestAppContext
 import com.embabel.common.ai.model.ModelProvider
 import org.drivine.manager.PersistenceManager
@@ -22,13 +21,11 @@ import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.test.context.ContextConfiguration
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import java.util.*
 
 @SpringBootTest(classes = [TestAppContext::class])
 @AutoConfigureMockMvc
-@ContextConfiguration(initializers = [Neo4jPropertiesInitializer::class])
 @ImportAutoConfiguration(exclude = [McpClientAutoConfiguration::class])
 class DrivineCypherSearchTest {
     @MockitoBean
