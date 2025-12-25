@@ -4,6 +4,9 @@
 # Drivine datasource configuration
 # When test.neo4j.use-local=true (or USE_LOCAL_NEO4J=true): these settings are used as-is
 # When use-local=false (default): host/port/password are overridden with Testcontainer values
+test:
+  neo4j:
+    use-local: false
 database:
   datasources:
     neo:

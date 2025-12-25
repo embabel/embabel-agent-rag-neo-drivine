@@ -22,7 +22,7 @@ class ContentElementMapper : RowMapper<ContentElement> {
                 parentId = row["parentId"] as String,
                 metadata = metadata,
             )
-        if (labels.contains("Document")) {
+        if (labels.contains("Document") || labels.contains("ContentRoot")) {
             val ingestionDate = when (val rawDate = row["ingestionDate"]) {
                 is Instant -> rawDate
                 is ZonedDateTime -> rawDate.toInstant()
