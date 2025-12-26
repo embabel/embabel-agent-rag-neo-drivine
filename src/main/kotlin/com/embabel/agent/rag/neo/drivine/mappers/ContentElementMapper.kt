@@ -11,10 +11,29 @@ import java.time.ZonedDateTime
 @Component
 class ContentElementMapper : RowMapper<ContentElement> {
 
+    companion object {
+        /**
+         * Core properties that are NOT metadata.
+         * Everything else in the node properties is considered metadata.
+         */
+        private val CORE_PROPERTIES = setOf(
+            "id",
+            "text",
+            "parentId",
+            "uri",
+            "ingestionTimestamp",
+            "lastModifiedDate",
+            "embedding",
+            "embeddingModel",
+            "embeddedAt"
+        )
+    }
+
     override fun map(row: Map<String, *>): ContentElement {
-        val metadata = mutableMapOf<String, Any>()
-        metadata["source"] = row["metadata_source"] ?: "unknown"
         val labels = row["labels"] as? List<*> ?: error("Must have labels")
+        val allProperties = row["properties"] as? Map<*, *> ?: emptyMap<String, Any>()
+        val metadata = extractMetadata(allProperties)
+
         if (labels.contains("Chunk"))
             return Chunk.Companion(
                 id = row["id"] as String,
@@ -41,6 +60,16 @@ class ContentElementMapper : RowMapper<ContentElement> {
             )
         }
         throw RuntimeException("Don't know how to map: $labels")
+    }
+
+    /**
+     * Extracts metadata from node properties by filtering out core properties.
+     */
+    private fun extractMetadata(allProperties: Map<*, *>): Map<String, Any> {
+        return allProperties
+            .filterKeys { key -> key is String && key !in CORE_PROPERTIES }
+            .mapKeys { it.key as String }
+            .mapValues { it.value as Any }
     }
 
 }

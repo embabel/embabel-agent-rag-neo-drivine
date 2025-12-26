@@ -311,8 +311,8 @@ class DrivineStore(
                 text: c.text,
                 parentId: c.parentId,
                 ingestionDate: c.ingestionTimestamp,
-                metadata_source: c.metadata.source,
-                labels: labels(c)
+                labels: labels(c),
+                properties: properties(c)
               } AS result
             """.trimIndent()
 

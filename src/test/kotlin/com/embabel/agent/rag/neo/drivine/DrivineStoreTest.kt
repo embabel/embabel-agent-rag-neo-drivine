@@ -1,13 +1,16 @@
 package com.embabel.agent.rag.neo.drivine
 
+import com.embabel.agent.rag.model.Chunk
 import com.embabel.agent.rag.neo.drivine.test.TestAppContext
 import com.embabel.common.ai.model.ModelProvider
 import org.drivine.manager.PersistenceManager
 import org.drivine.query.QuerySpecification
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.springframework.ai.mcp.client.common.autoconfigure.McpClientAutoConfiguration
 import org.springframework.beans.factory.annotation.Autowired
@@ -126,5 +129,93 @@ class DrivineStoreTest {
         val result = drivineStore.findContentRootByUri(uri)
 
         assertNull(result, "Chunk nodes should not be returned as ContentRoot")
+    }
+
+    @Nested
+    inner class ChunkMetadataPersistence {
+
+        @Test
+        fun `should persist chunk metadata`() {
+            val chunkId = UUID.randomUUID().toString()
+            val parentId = UUID.randomUUID().toString()
+            val metadata = mapOf(
+                "source" to "test-source",
+                "section_title" to "Test Section",
+                "page_number" to 42
+            )
+            val chunk = Chunk(
+                id = chunkId,
+                text = "This is test chunk content",
+                parentId = parentId,
+                metadata = metadata
+            )
+            testNodeIds.add(chunkId)
+
+            drivineStore.save(chunk)
+
+            val retrieved = drivineStore.findById(chunkId)
+            println("Saved chunk: $chunk")
+            println("Retrieved chunk: $retrieved")
+
+            assertNotNull(retrieved, "Chunk should be retrievable after save")
+            require(retrieved is Chunk) { "Retrieved element should be a Chunk" }
+            assertEquals(chunkId, retrieved.id)
+            assertEquals("This is test chunk content", retrieved.text)
+            assertEquals(parentId, retrieved.parentId)
+
+            // Verify metadata is preserved
+            assertEquals("test-source", retrieved.metadata["source"], "source metadata should be preserved")
+            assertEquals("Test Section", retrieved.metadata["section_title"], "section_title metadata should be preserved")
+            // Neo4j returns integers as Long
+            assertEquals(42L, retrieved.metadata["page_number"], "page_number metadata should be preserved")
+        }
+
+        @Test
+        fun `should persist chunk with empty metadata`() {
+            val chunkId = UUID.randomUUID().toString()
+            val parentId = UUID.randomUUID().toString()
+            val chunk = Chunk(
+                id = chunkId,
+                text = "Chunk with no metadata",
+                parentId = parentId,
+                metadata = emptyMap()
+            )
+            testNodeIds.add(chunkId)
+
+            drivineStore.save(chunk)
+
+            val retrieved = drivineStore.findById(chunkId)
+            assertNotNull(retrieved, "Chunk should be retrievable after save")
+            require(retrieved is Chunk) { "Retrieved element should be a Chunk" }
+            assertEquals(chunkId, retrieved.id)
+        }
+
+        @Test
+        fun `should retrieve chunks by id with metadata preserved`() {
+            val chunkId = UUID.randomUUID().toString()
+            val parentId = UUID.randomUUID().toString()
+            val metadata = mapOf(
+                "source" to "bulk-test-source",
+                "custom_field" to "custom_value"
+            )
+            val chunk = Chunk(
+                id = chunkId,
+                text = "Bulk retrieval test chunk",
+                parentId = parentId,
+                metadata = metadata
+            )
+            testNodeIds.add(chunkId)
+
+            drivineStore.save(chunk)
+
+            val retrieved = drivineStore.findAllChunksById(listOf(chunkId)).toList()
+            println("Retrieved chunks: $retrieved")
+
+            assertEquals(1, retrieved.size, "Should retrieve exactly one chunk")
+            val retrievedChunk = retrieved.first()
+            assertEquals(chunkId, retrievedChunk.id)
+            assertEquals("bulk-test-source", retrievedChunk.metadata["source"], "source metadata should be preserved in bulk retrieval")
+            assertEquals("custom_value", retrievedChunk.metadata["custom_field"], "custom_field metadata should be preserved in bulk retrieval")
+        }
     }
 }
