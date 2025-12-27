@@ -33,3 +33,10 @@ build/
 
 ### macOS ###
 .DS_Store
+
+### Logs ###
+*.log
+
+## Env
+.envrc
+.env
