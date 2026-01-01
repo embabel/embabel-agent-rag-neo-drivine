@@ -16,8 +16,8 @@
 package com.embabel.agent.rag.neo.drivine.test
 
 import com.embabel.agent.rag.neo.drivine.NeoRagServiceProperties
-import org.drivine.autoconfigure.DrivinePropertiesConfiguration
-import org.drivine.autoconfigure.DrivineTestConfiguration
+import org.drivine.autoconfigure.EnableDrivine
+import org.drivine.autoconfigure.EnableDrivinePropertiesConfig
 import org.drivine.autoconfigure.EnableDrivineTestConfig
 import org.drivine.manager.PersistenceManager
 import org.drivine.manager.PersistenceManagerFactory
@@ -31,21 +31,21 @@ import org.springframework.context.annotation.FilterType
 /**
  * Test configuration for Drivine-based tests.
  *
- * Uses Drivine's DrivineTestConfiguration which automatically handles:
+ * Uses @EnableDrivine, @EnableDrivinePropertiesConfig, and @EnableDrivineTestConfig which handle:
  * - Testcontainers (default): starts Neo4j container automatically
  * - Local Neo4j: set USE_LOCAL_NEO4J=true env var or test.neo4j.use-local=true property
  *
  * Datasource properties are configured in application.yml under database.datasources.neo
  */
 @Configuration
+@EnableDrivine
+@EnableDrivinePropertiesConfig
 @EnableDrivineTestConfig
 @ComponentScan(
-    basePackages = ["org.drivine", "com.embabel.agent.rag.neo.drivine"],
+    basePackages = ["com.embabel.agent.rag.neo.drivine"],
     excludeFilters = [ComponentScan.Filter(
         type = FilterType.ASSIGNABLE_TYPE,
         classes = [
-            DrivinePropertiesConfiguration::class,
-            DrivineTestConfiguration::class,
             RagTestShellApplication::class,
             RagShellCommands::class,
             RagChatActions::class

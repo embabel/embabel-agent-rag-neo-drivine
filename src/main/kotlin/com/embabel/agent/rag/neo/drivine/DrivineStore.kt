@@ -3,7 +3,7 @@ package com.embabel.agent.rag.neo.drivine
 import com.embabel.agent.api.common.Embedding
 import com.embabel.agent.rag.ingestion.RetrievableEnhancer
 import com.embabel.agent.rag.model.*
-import com.embabel.agent.rag.neo.drivine.mappers.ContentElementMapper
+import com.embabel.agent.rag.neo.drivine.mappers.DefaultContentElementRowMapper
 import com.embabel.agent.rag.neo.drivine.model.ContentElementRepositoryInfoImpl
 import com.embabel.agent.rag.service.CoreSearchOperations
 import com.embabel.agent.rag.service.EntitySearch
@@ -23,8 +23,8 @@ import com.embabel.common.core.types.SimilarityCutoff
 import com.embabel.common.core.types.SimilarityResult
 import com.embabel.common.core.types.TextSimilaritySearchRequest
 import org.drivine.manager.PersistenceManager
+import org.drivine.mapper.RowMapper
 import org.drivine.query.QuerySpecification
-import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
@@ -34,12 +34,12 @@ import org.springframework.transaction.support.TransactionTemplate
 @Service
 class DrivineStore(
     @param:Qualifier("neo") val persistenceManager: PersistenceManager,
-    override val enhancers: List<RetrievableEnhancer> = emptyList(),
     val properties: NeoRagServiceProperties,
-    private val cypherSearch: CypherSearch,
-    private val contentElementMapper: ContentElementMapper,
     modelProvider: ModelProvider,
     platformTransactionManager: PlatformTransactionManager,
+    private val cypherSearch: CypherSearch,
+    override val enhancers: List<RetrievableEnhancer> = emptyList(),
+    private val contentElementMapper: RowMapper<ContentElement> = DefaultContentElementRowMapper(),
 ) : AbstractChunkingContentElementRepository(properties), ChunkingContentElementRepository, RagFacetProvider,
     CoreSearchOperations, ResultExpander {
 
