@@ -18,6 +18,7 @@ import com.embabel.agent.rag.store.ChunkingContentElementRepository
 import com.embabel.agent.rag.store.ContentElementRepositoryInfo
 import com.embabel.agent.rag.store.DocumentDeletionResult
 import com.embabel.common.ai.model.DefaultModelSelectionCriteria
+import com.embabel.common.ai.model.EmbeddingService
 import com.embabel.common.ai.model.ModelProvider
 import com.embabel.common.core.types.SimilarityCutoff
 import com.embabel.common.core.types.SimilarityResult
@@ -25,6 +26,7 @@ import com.embabel.common.core.types.TextSimilaritySearchRequest
 import org.drivine.manager.PersistenceManager
 import org.drivine.mapper.RowMapper
 import org.drivine.query.QuerySpecification
+import org.springframework.ai.embedding.EmbeddingModel
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.support.TransactionTemplate
@@ -32,15 +34,13 @@ import org.springframework.transaction.support.TransactionTemplate
 class DrivineStore @JvmOverloads constructor(
     val persistenceManager: PersistenceManager,
     val properties: NeoRagServiceProperties,
-    modelProvider: ModelProvider,
+    embeddingService: EmbeddingService,
     platformTransactionManager: PlatformTransactionManager,
     private val cypherSearch: CypherSearch,
     override val enhancers: List<RetrievableEnhancer> = emptyList(),
     private val contentElementMapper: RowMapper<ContentElement> = DefaultContentElementRowMapper(),
-) : AbstractChunkingContentElementRepository(properties), ChunkingContentElementRepository, RagFacetProvider,
+) : AbstractChunkingContentElementRepository(properties, embeddingService), ChunkingContentElementRepository, RagFacetProvider,
     CoreSearchOperations, ResultExpander {
-
-    private val embeddingService = modelProvider.getEmbeddingService(DefaultModelSelectionCriteria)
 
     override val name get() = properties.name
 
@@ -127,18 +127,22 @@ class DrivineStore @JvmOverloads constructor(
         }
     }
 
-    override fun onNewRetrievables(retrievables: List<Retrievable>) {
-        retrievables.forEach { embedRetrievable(it) }
+    override fun persistChunksWithEmbeddings(
+        chunks: List<Chunk>,
+        embeddings: Map<String, FloatArray>
+    ) {
+        //TODO: Fix the !! below
+        chunks.forEach { chunk -> embedRetrievable(chunk, embeddings[chunk.id]!!) }
     }
 
     fun embeddingFor(text: String): Embedding =
-        embeddingService.model.embed(text)
+        embeddingService!!.embed(text)
 
     private fun embedRetrievable(
         retrievable: Retrievable,
+        embedding: Embedding,
     ) {
         try {
-            val embedding = embeddingFor(retrievable.embeddableValue())
             val cypher = """
                 MERGE (n:${retrievable.labels().joinToString(":")} {id: ${'$'}id})
                 SET n.embedding = ${'$'}embedding,
@@ -149,7 +153,7 @@ class DrivineStore @JvmOverloads constructor(
             val params = mapOf(
                 "id" to retrievable.id,
                 "embedding" to embedding,
-                "embeddingModel" to embeddingService.name,
+                "embeddingModel" to embeddingService!!.name,
             )
             val result = cypherSearch.query(
                 purpose = "embedding",
@@ -519,11 +523,12 @@ class DrivineStore @JvmOverloads constructor(
         name: String,
         on: String,
     ) {
+        val embeddingModel = embeddingService!!.model as EmbeddingModel // TODO: Fixme
         val statement = """
             CREATE VECTOR INDEX `$name` IF NOT EXISTS
             FOR (n:$on) ON (n.embedding)
             OPTIONS {indexConfig: {
-            `vector.dimensions`: ${embeddingService.model.dimensions()},
+            `vector.dimensions`: ${embeddingModel.dimensions()},
             `vector.similarity_function`: 'cosine'
             }}"""
 

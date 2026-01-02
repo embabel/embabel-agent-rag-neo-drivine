@@ -18,11 +18,18 @@ package com.embabel.agent.rag.neo.drivine.test
 import com.embabel.agent.rag.neo.drivine.DrivineCypherSearch
 import com.embabel.agent.rag.neo.drivine.DrivineStore
 import com.embabel.agent.rag.neo.drivine.NeoRagServiceProperties
-import com.embabel.common.ai.model.ModelProvider
+import com.embabel.common.ai.model.EmbeddingService
+import com.embabel.common.ai.model.SpringEmbeddingService
+import com.embabel.common.util.generateRandomFloatArray
 import org.drivine.autoconfigure.EnableDrivine
 import org.drivine.autoconfigure.EnableDrivineTestConfig
 import org.drivine.manager.PersistenceManager
 import org.drivine.manager.PersistenceManagerFactory
+import org.springframework.ai.document.Document
+import org.springframework.ai.embedding.Embedding
+import org.springframework.ai.embedding.EmbeddingModel
+import org.springframework.ai.embedding.EmbeddingRequest
+import org.springframework.ai.embedding.EmbeddingResponse
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.ComponentScan
@@ -30,6 +37,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.EnableAspectJAutoProxy
 import org.springframework.context.annotation.FilterType
 import org.springframework.transaction.PlatformTransactionManager
+import java.util.LinkedList
 
 /**
  * Test configuration for Drivine-based tests.
@@ -77,16 +85,37 @@ class TestAppContext {
     fun drivineStore(
         persistenceManager: PersistenceManager,
         properties: NeoRagServiceProperties,
-        modelProvider: ModelProvider,
         transactionManager: PlatformTransactionManager,
         cypherSearch: DrivineCypherSearch
     ): DrivineStore {
         return DrivineStore(
             persistenceManager = persistenceManager,
             properties = properties,
-            modelProvider = modelProvider,
             platformTransactionManager = transactionManager,
-            cypherSearch = cypherSearch
+            cypherSearch = cypherSearch,
+            embeddingService = SpringEmbeddingService("fake", "embabel", FakeEmbeddingModel())
         )
     }
 }
+
+data class FakeEmbeddingModel(
+    val dimensions: Int = 1536,
+) : EmbeddingModel {
+
+    override fun embed(document: Document): FloatArray {
+        return generateRandomFloatArray(dimensions)
+    }
+
+    override fun embed(texts: List<String>): MutableList<FloatArray> {
+        return texts.map { generateRandomFloatArray(dimensions) }.toMutableList()
+    }
+
+    override fun call(request: EmbeddingRequest): EmbeddingResponse {
+        val output = LinkedList<Embedding>()
+        for (i in request.instructions.indices) {
+            output.add(Embedding(generateRandomFloatArray(dimensions), i))
+        }
+        return EmbeddingResponse(output)
+    }
+}
+

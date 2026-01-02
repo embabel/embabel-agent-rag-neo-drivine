@@ -24,7 +24,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
  */
 @ConfigurationProperties(prefix = "embabel.agent.rag.neo")
 class NeoRagServiceProperties : ContentChunker.Config {
-    
+
     var chunkNodeName: String = "Chunk"
     var entityNodeName: String = "Entity"
     var name: String = "OgmRagService"
@@ -36,6 +36,7 @@ class NeoRagServiceProperties : ContentChunker.Config {
 
     override var maxChunkSize: Int = 1500
     override var overlapSize: Int = 200
+    override var embeddingBatchSize = 500
 
     override var includeSectionTitleInChunk: Boolean = false
 }
