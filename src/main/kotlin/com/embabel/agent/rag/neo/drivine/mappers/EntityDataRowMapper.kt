@@ -3,9 +3,7 @@ package com.embabel.agent.rag.neo.drivine.mappers
 import com.embabel.agent.rag.model.EntityData
 import com.embabel.agent.rag.model.SimpleNamedEntityData
 import org.drivine.mapper.RowMapper
-import org.springframework.stereotype.Component
 
-@Component
 class EntityDataRowMapper : RowMapper<EntityData> {
 
     override fun map(row: Map<String, *>): EntityData {

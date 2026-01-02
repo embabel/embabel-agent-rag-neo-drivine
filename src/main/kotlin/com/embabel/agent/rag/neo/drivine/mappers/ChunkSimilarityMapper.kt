@@ -4,9 +4,7 @@ import com.embabel.agent.rag.model.Chunk
 import com.embabel.common.core.types.SimilarityResult
 import com.embabel.common.core.types.SimpleSimilaritySearchResult
 import org.drivine.mapper.RowMapper
-import org.springframework.stereotype.Component
 
-@Component
 class ChunkSimilarityMapper : RowMapper<SimilarityResult<Chunk>> {
 
     override fun map(row: Map<String, *>): SimilarityResult<Chunk> {
