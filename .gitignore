@@ -40,3 +40,4 @@ build/
 ## Env
 .envrc
 .env
+.claude
