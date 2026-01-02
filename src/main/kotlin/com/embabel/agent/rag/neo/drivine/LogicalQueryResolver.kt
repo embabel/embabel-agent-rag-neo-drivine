@@ -4,7 +4,6 @@ import com.embabel.common.util.loggerFor
 import org.slf4j.Logger
 import org.springframework.core.io.DefaultResourceLoader
 import org.springframework.core.io.ResourceLoader
-import org.springframework.stereotype.Service
 import java.io.IOException
 import java.nio.charset.Charset
 
@@ -25,7 +24,6 @@ interface LogicalQueryResolver {
 
 const val DEFAULT_CYPHER_LOCATION = "classpath:cypher"
 
-@Service
 data class FixedLocationLogicalQueryResolver(
     val location: String = DEFAULT_CYPHER_LOCATION,
     private val resourceLoader: ResourceLoader = DefaultResourceLoader(),

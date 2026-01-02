@@ -1,32 +1,31 @@
 package com.embabel.agent.rag.neo.drivine
 
 import com.embabel.agent.rag.model.Chunk
+import com.embabel.agent.rag.model.ContentElement
 import com.embabel.agent.rag.model.EntityData
 import com.embabel.agent.rag.model.NamedEntityData
 import com.embabel.agent.rag.model.Retrievable
 import com.embabel.agent.rag.neo.drivine.mappers.ChunkSimilarityMapper
-import com.embabel.agent.rag.neo.drivine.mappers.ContentElementMapper
-import com.embabel.agent.rag.neo.drivine.mappers.EntityDataMapper
+import com.embabel.agent.rag.neo.drivine.mappers.DefaultContentElementRowMapper
+import com.embabel.agent.rag.neo.drivine.mappers.EntityDataRowMapper
 import com.embabel.agent.rag.neo.drivine.mappers.EntityDataSimilarityMapper
 import com.embabel.agent.rag.service.Cluster
 import com.embabel.agent.rag.service.ClusterFinder
 import com.embabel.agent.rag.service.ClusterRetrievalRequest
 import com.embabel.common.core.types.SimilarityResult
 import org.drivine.manager.PersistenceManager
+import org.drivine.mapper.RowMapper
 import org.drivine.query.QuerySpecification
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
-@Service
-class DrivineCypherSearch(
+class DrivineCypherSearch @JvmOverloads constructor(
     private val persistenceManager: PersistenceManager,
-    private val queryResolver: LogicalQueryResolver,
-    private val contentElementMapper: ContentElementMapper,
-    private val entityDataMapper: EntityDataMapper,
-    private val entityDataSimilarityMapper: EntityDataSimilarityMapper,
-    private val chunkSimilarityMapper: ChunkSimilarityMapper,
+    private val queryResolver: LogicalQueryResolver = FixedLocationLogicalQueryResolver(),
+    private val entityDataMapper: RowMapper<EntityData> = EntityDataRowMapper(),
+    private val entityDataSimilarityMapper: RowMapper<SimilarityResult<EntityData>> = EntityDataSimilarityMapper(),
+    private val chunkSimilarityMapper: RowMapper<SimilarityResult<Chunk>> = ChunkSimilarityMapper(),
 ) : CypherSearch, ClusterFinder {
 
     private val logger = LoggerFactory.getLogger(DrivineCypherSearch::class.java)

@@ -6,9 +6,7 @@ import com.embabel.agent.rag.model.SimpleNamedEntityData
 import com.embabel.common.core.types.SimilarityResult
 import com.embabel.common.core.types.SimpleSimilaritySearchResult
 import org.drivine.mapper.RowMapper
-import org.springframework.stereotype.Component
 
-@Component
 class EntityDataSimilarityMapper : RowMapper<SimilarityResult<EntityData>> {
 
     override fun map(row: Map<String, *>): SimilarityResult<EntityData> {

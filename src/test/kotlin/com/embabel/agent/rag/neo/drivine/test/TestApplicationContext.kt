@@ -15,9 +15,11 @@
  */
 package com.embabel.agent.rag.neo.drivine.test
 
+import com.embabel.agent.rag.neo.drivine.DrivineCypherSearch
+import com.embabel.agent.rag.neo.drivine.DrivineStore
 import com.embabel.agent.rag.neo.drivine.NeoRagServiceProperties
-import org.drivine.autoconfigure.DrivinePropertiesConfiguration
-import org.drivine.autoconfigure.DrivineTestConfiguration
+import com.embabel.common.ai.model.ModelProvider
+import org.drivine.autoconfigure.EnableDrivine
 import org.drivine.autoconfigure.EnableDrivineTestConfig
 import org.drivine.manager.PersistenceManager
 import org.drivine.manager.PersistenceManagerFactory
@@ -27,28 +29,33 @@ import org.springframework.context.annotation.ComponentScan
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.EnableAspectJAutoProxy
 import org.springframework.context.annotation.FilterType
+import org.springframework.transaction.PlatformTransactionManager
 
 /**
  * Test configuration for Drivine-based tests.
  *
- * Uses Drivine's DrivineTestConfiguration which automatically handles:
+ * Uses @EnableDrivine and @EnableDrivineTestConfig which handle:
  * - Testcontainers (default): starts Neo4j container automatically
  * - Local Neo4j: set USE_LOCAL_NEO4J=true env var or test.neo4j.use-local=true property
+ *
+ * Note: Do NOT use @EnableDrivinePropertiesConfig with @EnableDrivineTestConfig - the test
+ * config provides its own DataSourceMap with testcontainer support.
  *
  * Datasource properties are configured in application.yml under database.datasources.neo
  */
 @Configuration
+@EnableDrivine
 @EnableDrivineTestConfig
 @ComponentScan(
-    basePackages = ["org.drivine", "com.embabel.agent.rag.neo.drivine"],
+    basePackages = ["com.embabel.agent.rag.neo.drivine"],
     excludeFilters = [ComponentScan.Filter(
         type = FilterType.ASSIGNABLE_TYPE,
         classes = [
-            DrivinePropertiesConfiguration::class,
-            DrivineTestConfiguration::class,
             RagTestShellApplication::class,
             RagShellCommands::class,
-            RagChatActions::class
+            RagChatActions::class,
+            DrivineCypherSearch::class,
+            DrivineStore::class
         ]
     )]
 )
@@ -59,5 +66,27 @@ class TestAppContext {
     @Bean("neo")
     fun persistenceManager(factory: PersistenceManagerFactory): PersistenceManager {
         return factory.get("neo")
+    }
+
+    @Bean
+    fun drivineCypherSearch(persistenceManager: PersistenceManager): DrivineCypherSearch {
+        return DrivineCypherSearch(persistenceManager)
+    }
+
+    @Bean
+    fun drivineStore(
+        persistenceManager: PersistenceManager,
+        properties: NeoRagServiceProperties,
+        modelProvider: ModelProvider,
+        transactionManager: PlatformTransactionManager,
+        cypherSearch: DrivineCypherSearch
+    ): DrivineStore {
+        return DrivineStore(
+            persistenceManager = persistenceManager,
+            properties = properties,
+            modelProvider = modelProvider,
+            platformTransactionManager = transactionManager,
+            cypherSearch = cypherSearch
+        )
     }
 }

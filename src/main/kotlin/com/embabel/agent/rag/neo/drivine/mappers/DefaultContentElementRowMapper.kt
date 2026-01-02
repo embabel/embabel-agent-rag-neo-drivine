@@ -4,30 +4,26 @@ import com.embabel.agent.rag.model.Chunk
 import com.embabel.agent.rag.model.ContentElement
 import com.embabel.agent.rag.model.MaterializedDocument
 import org.drivine.mapper.RowMapper
-import org.springframework.stereotype.Component
 import java.time.Instant
 import java.time.ZonedDateTime
 
-@Component
-class ContentElementMapper : RowMapper<ContentElement> {
+internal class DefaultContentElementRowMapper : RowMapper<ContentElement> {
 
-    companion object {
-        /**
-         * Core properties that are NOT metadata.
-         * Everything else in the node properties is considered metadata.
-         */
-        private val CORE_PROPERTIES = setOf(
-            "id",
-            "text",
-            "parentId",
-            "uri",
-            "ingestionTimestamp",
-            "lastModifiedDate",
-            "embedding",
-            "embeddingModel",
-            "embeddedAt"
-        )
-    }
+    /**
+     * Core properties that are NOT metadata.
+     * Everything else in the node properties is considered metadata.
+     */
+    private val CORE_PROPERTIES = setOf(
+        "id",
+        "text",
+        "parentId",
+        "uri",
+        "ingestionTimestamp",
+        "lastModifiedDate",
+        "embedding",
+        "embeddingModel",
+        "embeddedAt"
+    )
 
     override fun map(row: Map<String, *>): ContentElement {
         val labels = row["labels"] as? List<*> ?: error("Must have labels")
@@ -71,5 +67,5 @@ class ContentElementMapper : RowMapper<ContentElement> {
             .mapKeys { it.key as String }
             .mapValues { it.value as Any }
     }
-
 }
+
