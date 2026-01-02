@@ -17,7 +17,6 @@ package com.embabel.agent.rag.neo.drivine.test
 
 import com.embabel.agent.rag.neo.drivine.NeoRagServiceProperties
 import org.drivine.autoconfigure.EnableDrivine
-import org.drivine.autoconfigure.EnableDrivinePropertiesConfig
 import org.drivine.autoconfigure.EnableDrivineTestConfig
 import org.drivine.manager.PersistenceManager
 import org.drivine.manager.PersistenceManagerFactory
@@ -31,15 +30,17 @@ import org.springframework.context.annotation.FilterType
 /**
  * Test configuration for Drivine-based tests.
  *
- * Uses @EnableDrivine, @EnableDrivinePropertiesConfig, and @EnableDrivineTestConfig which handle:
+ * Uses @EnableDrivine and @EnableDrivineTestConfig which handle:
  * - Testcontainers (default): starts Neo4j container automatically
  * - Local Neo4j: set USE_LOCAL_NEO4J=true env var or test.neo4j.use-local=true property
+ *
+ * Note: Do NOT use @EnableDrivinePropertiesConfig with @EnableDrivineTestConfig - the test
+ * config provides its own DataSourceMap with testcontainer support.
  *
  * Datasource properties are configured in application.yml under database.datasources.neo
  */
 @Configuration
 @EnableDrivine
-@EnableDrivinePropertiesConfig
 @EnableDrivineTestConfig
 @ComponentScan(
     basePackages = ["com.embabel.agent.rag.neo.drivine"],
