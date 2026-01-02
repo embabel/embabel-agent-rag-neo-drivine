@@ -25,15 +25,12 @@ import com.embabel.common.core.types.TextSimilaritySearchRequest
 import org.drivine.manager.PersistenceManager
 import org.drivine.mapper.RowMapper
 import org.drivine.query.QuerySpecification
-import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.support.TransactionTemplate
 
-@Service
-class DrivineStore(
-    @param:Qualifier("neo") val persistenceManager: PersistenceManager,
+class DrivineStore @JvmOverloads constructor(
+    val persistenceManager: PersistenceManager,
     val properties: NeoRagServiceProperties,
     modelProvider: ModelProvider,
     platformTransactionManager: PlatformTransactionManager,

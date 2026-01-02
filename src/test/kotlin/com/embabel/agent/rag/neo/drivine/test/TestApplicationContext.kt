@@ -15,7 +15,10 @@
  */
 package com.embabel.agent.rag.neo.drivine.test
 
+import com.embabel.agent.rag.neo.drivine.DrivineCypherSearch
+import com.embabel.agent.rag.neo.drivine.DrivineStore
 import com.embabel.agent.rag.neo.drivine.NeoRagServiceProperties
+import com.embabel.common.ai.model.ModelProvider
 import org.drivine.autoconfigure.EnableDrivine
 import org.drivine.autoconfigure.EnableDrivineTestConfig
 import org.drivine.manager.PersistenceManager
@@ -26,6 +29,7 @@ import org.springframework.context.annotation.ComponentScan
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.EnableAspectJAutoProxy
 import org.springframework.context.annotation.FilterType
+import org.springframework.transaction.PlatformTransactionManager
 
 /**
  * Test configuration for Drivine-based tests.
@@ -49,7 +53,9 @@ import org.springframework.context.annotation.FilterType
         classes = [
             RagTestShellApplication::class,
             RagShellCommands::class,
-            RagChatActions::class
+            RagChatActions::class,
+            DrivineCypherSearch::class,
+            DrivineStore::class
         ]
     )]
 )
@@ -60,5 +66,27 @@ class TestAppContext {
     @Bean("neo")
     fun persistenceManager(factory: PersistenceManagerFactory): PersistenceManager {
         return factory.get("neo")
+    }
+
+    @Bean
+    fun drivineCypherSearch(persistenceManager: PersistenceManager): DrivineCypherSearch {
+        return DrivineCypherSearch(persistenceManager)
+    }
+
+    @Bean
+    fun drivineStore(
+        persistenceManager: PersistenceManager,
+        properties: NeoRagServiceProperties,
+        modelProvider: ModelProvider,
+        transactionManager: PlatformTransactionManager,
+        cypherSearch: DrivineCypherSearch
+    ): DrivineStore {
+        return DrivineStore(
+            persistenceManager = persistenceManager,
+            properties = properties,
+            modelProvider = modelProvider,
+            platformTransactionManager = transactionManager,
+            cypherSearch = cypherSearch
+        )
     }
 }
