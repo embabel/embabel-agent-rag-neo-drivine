@@ -26,21 +26,66 @@ import org.drivine.query.QuerySpecification
  * - Vector similarity search via Neo4j vector indexes
  * - Relationship creation between entities using APOC
  *
+ * ## Indexing
+ * This repository relies on vector and full-text indexes created on nodes with the
+ * [NeoRagServiceProperties.entityNodeName] label (default: "Entity"). These indexes
+ * are provisioned by [DrivineStore.provision].
+ *
+ * When saving entities, this repository automatically ensures that
+ * [NeoRagServiceProperties.entityNodeName] is included in the node's labels,
+ * regardless of whether it was present in [NamedEntityData.labels]. This guarantees
+ * that all saved entities are properly indexed for search operations.
+ *
  * @param persistenceManager Drivine persistence manager for Neo4j operations
  * @param properties Configuration properties including index names and entity node label
  * @param embeddingService Service for generating embeddings for vector search
+ * @param queryResolver Resolver for loading Cypher queries from external files
  * @param namedEntityDataMapper Row mapper for converting query results to [NamedEntityData]
  * @param namedEntityDataSimilarityMapper Row mapper for similarity search results
+ * @param verifyIndexes If true (default), verifies required indexes exist at construction time
+ *        and logs a warning if they are missing
  */
 class DrivineNamedEntityDataRepository @JvmOverloads constructor(
     private val persistenceManager: PersistenceManager,
     private val properties: NeoRagServiceProperties,
     private val embeddingService: EmbeddingService,
+    private val queryResolver: LogicalQueryResolver = FixedLocationLogicalQueryResolver(),
     private val namedEntityDataMapper: RowMapper<NamedEntityData> = NamedEntityDataRowMapper(),
     private val namedEntityDataSimilarityMapper: RowMapper<SimilarityResult<NamedEntityData>> = NamedEntityDataSimilarityMapper(),
+    verifyIndexes: Boolean = true,
 ) : NamedEntityDataRepository {
 
     private val logger = loggerFor<DrivineNamedEntityDataRepository>()
+
+    init {
+        if (verifyIndexes) {
+            verifyRequiredIndexes()
+        }
+    }
+
+    private fun verifyRequiredIndexes() {
+        val requiredIndexes = listOf(properties.entityIndex, properties.entityFullTextIndex)
+        try {
+            val statement = "SHOW INDEXES YIELD name RETURN collect(name) AS indexNames"
+            @Suppress("UNCHECKED_CAST")
+            val existingIndexes = persistenceManager.getOne(
+                QuerySpecification
+                    .withStatement(statement)
+                    .transform(List::class.java)
+            ) as List<String>
+
+            val missingIndexes = requiredIndexes.filter { it !in existingIndexes }
+            if (missingIndexes.isNotEmpty()) {
+                logger.warn(
+                    "Required indexes not found: {}. Run DrivineStore.provision() to create them. " +
+                        "Search operations will fail until indexes are created.",
+                    missingIndexes
+                )
+            }
+        } catch (e: Exception) {
+            logger.warn("Could not verify indexes: {}. Ensure indexes exist before using search operations.", e.message)
+        }
+    }
 
     override val luceneSyntaxNotes: String
         get() = "Full support"
@@ -54,16 +99,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
             "Creating relationship: ({} {})-[:{}]->({} {})",
             a.type, a.id, relationship.name, b.type, b.id
         )
-        val statement = """
-            MATCH (from:${properties.entityNodeName} {id: ${'$'}fromId})
-            WHERE ${'$'}fromType IN labels(from)
-            MATCH (to:${properties.entityNodeName} {id: ${'$'}toId})
-            WHERE ${'$'}toType IN labels(to)
-            CALL apoc.create.relationship(from, ${'$'}relType, ${'$'}relProperties, to)
-            YIELD rel
-            RETURN type(rel) AS relationType
-        """.trimIndent()
-
+        val statement = resolveQuery("create_named_entity_relationship")
         val params = mapOf(
             "fromId" to a.id,
             "fromType" to a.type,
@@ -124,7 +160,8 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
 
     override fun save(entity: NamedEntityData): NamedEntityData {
         logger.debug("Saving entity: id={}, name={}", entity.id, entity.name)
-        val labelsString = entity.labels().joinToString(":")
+        val labels = (entity.labels() + properties.entityNodeName).distinct()
+        val labelsString = labels.joinToString(":")
         val statement = """
             MERGE (e:$labelsString {id: ${'$'}id})
             SET e.name = ${'$'}name,
@@ -157,33 +194,13 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
 
     override fun textSearch(request: TextSimilaritySearchRequest): List<SimilarityResult<NamedEntityData>> {
         logger.info("Executing text search: query='{}', topK={}", request.query, request.topK)
-        val statement = """
-            CALL db.index.fulltext.queryNodes(${'$'}fulltextIndex, ${'$'}searchText)
-            YIELD node AS e, score
-            WHERE score IS NOT NULL AND '${properties.entityNodeName}' IN labels(e)
-            WITH collect({node: e, score: score}) AS results, max(score) AS maxScore
-            WHERE maxScore IS NOT NULL AND maxScore > 0
-            UNWIND results AS result
-            WITH result.node AS e,
-                 COALESCE(result.score / maxScore, 0.0) AS normalizedScore
-            WHERE normalizedScore >= ${'$'}similarityThreshold
-            RETURN {
-                id: e.id,
-                name: COALESCE(e.name, ''),
-                description: COALESCE(e.description, ''),
-                labels: labels(e),
-                properties: properties(e),
-                score: normalizedScore
-            } AS result
-            ORDER BY result.score DESC
-            LIMIT ${'$'}topK
-        """.trimIndent()
-
+        val statement = resolveQuery("named_entity_fulltext_search")
         val params = mapOf(
             "fulltextIndex" to properties.entityFullTextIndex,
             "searchText" to request.query,
             "similarityThreshold" to request.similarityThreshold,
             "topK" to request.topK,
+            "entityNodeName" to properties.entityNodeName,
         )
 
         val results = persistenceManager.query(
@@ -199,27 +216,13 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
     override fun vectorSearch(request: TextSimilaritySearchRequest): List<SimilarityResult<NamedEntityData>> {
         val embedding = embeddingService.embed(request.query)
         logger.info("Executing vector search: query='{}', topK={}", request.query, request.topK)
-        val statement = """
-            CALL db.index.vector.queryNodes(${'$'}vectorIndex, ${'$'}topK, ${'$'}queryVector)
-            YIELD node AS e, score
-            WHERE score >= ${'$'}similarityThreshold
-              AND '${properties.entityNodeName}' IN labels(e)
-            RETURN {
-                id: COALESCE(e.id, ''),
-                name: COALESCE(e.name, ''),
-                description: COALESCE(e.description, ''),
-                labels: labels(e),
-                properties: properties(e),
-                score: score
-            } AS result
-            ORDER BY result.score DESC
-        """.trimIndent()
-
+        val statement = resolveQuery("named_entity_vector_search")
         val params = mapOf(
             "vectorIndex" to properties.entityIndex,
             "queryVector" to embedding,
             "similarityThreshold" to request.similarityThreshold,
             "topK" to request.topK,
+            "entityNodeName" to properties.entityNodeName,
         )
 
         val results = persistenceManager.query(
@@ -244,4 +247,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
             properties: properties(e)
         } AS result
         """.trimIndent()
+
+    private fun resolveQuery(name: String): String =
+        queryResolver.resolve(name) ?: error("Could not resolve query: $name")
 }
