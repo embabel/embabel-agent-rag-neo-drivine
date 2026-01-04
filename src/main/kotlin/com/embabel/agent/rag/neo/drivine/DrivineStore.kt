@@ -46,6 +46,10 @@ class DrivineStore @JvmOverloads constructor(
 
     override val luceneSyntaxNotes = "Full support"
 
+    override fun supportsType(type: String): Boolean {
+        return type == Chunk::class.java.simpleName
+    }
+
     override fun provision() {
         logger.info("Provisioning with properties {}", properties)
         // TODO do we want this on ContentElement?
