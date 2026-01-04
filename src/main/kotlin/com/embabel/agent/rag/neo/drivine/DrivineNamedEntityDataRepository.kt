@@ -14,10 +14,28 @@ import org.drivine.manager.PersistenceManager
 import org.drivine.mapper.RowMapper
 import org.drivine.query.QuerySpecification
 
+/**
+ * Drivine-based implementation of [NamedEntityDataRepository] for Neo4j.
+ *
+ * Provides CRUD operations and search capabilities for [NamedEntityData] entities
+ * stored in Neo4j. Queries nodes directly without fetching relationships.
+ *
+ * Supports:
+ * - Basic CRUD: [save], [findById], [findByLabel], [delete]
+ * - Full-text search via Neo4j fulltext indexes
+ * - Vector similarity search via Neo4j vector indexes
+ * - Relationship creation between entities using APOC
+ *
+ * @param persistenceManager Drivine persistence manager for Neo4j operations
+ * @param properties Configuration properties including index names and entity node label
+ * @param embeddingService Service for generating embeddings for vector search
+ * @param namedEntityDataMapper Row mapper for converting query results to [NamedEntityData]
+ * @param namedEntityDataSimilarityMapper Row mapper for similarity search results
+ */
 class DrivineNamedEntityDataRepository @JvmOverloads constructor(
     private val persistenceManager: PersistenceManager,
     private val properties: NeoRagServiceProperties,
-    private val embeddingService: EmbeddingService? = null,
+    private val embeddingService: EmbeddingService,
     private val namedEntityDataMapper: RowMapper<NamedEntityData> = NamedEntityDataRowMapper(),
     private val namedEntityDataSimilarityMapper: RowMapper<SimilarityResult<NamedEntityData>> = NamedEntityDataSimilarityMapper(),
 ) : NamedEntityDataRepository {
@@ -179,9 +197,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
     }
 
     override fun vectorSearch(request: TextSimilaritySearchRequest): List<SimilarityResult<NamedEntityData>> {
-        val embedding = embeddingService?.embed(request.query)
-            ?: error("EmbeddingService is required for vector search")
-
+        val embedding = embeddingService.embed(request.query)
         logger.info("Executing vector search: query='{}', topK={}", request.query, request.topK)
         val statement = """
             CALL db.index.vector.queryNodes(${'$'}vectorIndex, ${'$'}topK, ${'$'}queryVector)
