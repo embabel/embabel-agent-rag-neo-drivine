@@ -1,6 +1,7 @@
 package com.embabel.agent.rag.neo.drivine
 
 import com.embabel.agent.core.DataDictionary
+import com.embabel.agent.rag.model.NamedEntity
 import com.embabel.agent.rag.model.NamedEntityData
 import com.embabel.agent.rag.neo.drivine.mappers.NamedEntityDataRowMapper
 import com.embabel.agent.rag.neo.drivine.mappers.NamedEntityDataSimilarityMapper
@@ -150,6 +151,18 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
                 .bind(mapOf("id" to id))
                 .mapWith(namedEntityDataMapper)
         )
+    }
+
+    // TODO native loading not yet supported
+    override fun <T : NamedEntity> findNativeAll(type: Class<T>): List<T>? {
+        return null
+    }
+
+    override fun <T : NamedEntity> findNativeById(
+        id: String,
+        type: Class<T>
+    ): T? {
+        return null
     }
 
     override fun findByLabel(label: String): List<NamedEntityData> {
