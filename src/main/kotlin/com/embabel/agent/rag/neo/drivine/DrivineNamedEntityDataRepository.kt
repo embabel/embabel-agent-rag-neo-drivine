@@ -14,6 +14,9 @@ import com.embabel.common.core.types.TextSimilaritySearchRequest
 import com.embabel.common.util.loggerFor
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import org.drivine.annotation.GraphView
+import org.drivine.annotation.NodeFragment
+import org.drivine.manager.GraphObjectManager
 import org.drivine.manager.PersistenceManager
 import org.drivine.mapper.RowMapper
 import org.drivine.query.QuerySpecification
@@ -54,6 +57,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
     private val properties: NeoRagServiceProperties,
     override val dataDictionary: DataDictionary,
     private val embeddingService: EmbeddingService,
+    private val graphObjectManager: GraphObjectManager? = null,
     override val objectMapper: ObjectMapper = jacksonObjectMapper(),
     private val queryResolver: LogicalQueryResolver = FixedLocationLogicalQueryResolver(),
     private val namedEntityDataMapper: RowMapper<NamedEntityData> = NamedEntityDataRowMapper(),
@@ -153,16 +157,19 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         )
     }
 
-    // TODO native loading not yet supported
+    override fun isNativeType(type: Class<*>): Boolean =
+        type.isAnnotationPresent(NodeFragment::class.java) ||
+                type.isAnnotationPresent(GraphView::class.java)
+
     override fun <T : NamedEntity> findNativeAll(type: Class<T>): List<T>? {
-        return null
+        return graphObjectManager?.loadAll(type)
     }
 
     override fun <T : NamedEntity> findNativeById(
         id: String,
         type: Class<T>
     ): T? {
-        return null
+        return graphObjectManager?.load(id, type)
     }
 
     override fun findByLabel(label: String): List<NamedEntityData> {
