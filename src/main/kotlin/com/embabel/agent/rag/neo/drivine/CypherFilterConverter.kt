@@ -1,0 +1,191 @@
+/*
+ * Copyright 2024-2026 Embabel Pty Ltd.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.embabel.agent.rag.neo.drivine
+
+import com.embabel.agent.rag.filter.PropertyFilter
+
+/**
+ * Result of converting a [PropertyFilter] to Cypher WHERE clause components.
+ *
+ * @property whereClause The Cypher WHERE clause fragment (without the WHERE keyword).
+ *                       Empty string if no filter was provided.
+ * @property parameters Map of parameter names to values for safe parameterized queries.
+ */
+data class CypherFilterResult(
+    val whereClause: String,
+    val parameters: Map<String, Any>,
+) {
+    companion object {
+        val EMPTY = CypherFilterResult("", emptyMap())
+    }
+
+    /**
+     * Returns true if this result represents no filter (empty WHERE clause).
+     */
+    fun isEmpty(): Boolean = whereClause.isEmpty()
+
+    /**
+     * Prepends " AND " and the where clause to an existing WHERE clause.
+     * Returns the original if this filter is empty.
+     */
+    fun appendTo(existingWhereClause: String): String {
+        if (isEmpty()) return existingWhereClause
+        return if (existingWhereClause.isBlank()) {
+            whereClause
+        } else {
+            "$existingWhereClause AND $whereClause"
+        }
+    }
+}
+
+/**
+ * Converts [PropertyFilter] expressions to Cypher WHERE clause components.
+ *
+ * Generates parameterized queries to prevent Cypher injection.
+ * Parameters are prefixed with "_filter_" to avoid conflicts with other query parameters.
+ *
+ * ## Usage
+ *
+ * ```kotlin
+ * val converter = CypherFilterConverter(nodeAlias = "e")
+ * val filter = PropertyFilter.eq("owner", "alice") and PropertyFilter.gte("score", 0.8)
+ * val result = converter.convert(filter)
+ *
+ * // result.whereClause = "e.owner = $_filter_0 AND e.score >= $_filter_1"
+ * // result.parameters = mapOf("_filter_0" to "alice", "_filter_1" to 0.8)
+ * ```
+ *
+ * ## Kotlin DSL example
+ *
+ * ```kotlin
+ * import com.embabel.agent.rag.filter.PropertyFilter.Companion.eq
+ * import com.embabel.agent.rag.filter.PropertyFilter.Companion.gte
+ *
+ * val filter = (eq("owner", userId) and gte("score", 0.7)) or eq("role", "admin")
+ * val result = converter.convert(filter)
+ * ```
+ *
+ * @property nodeAlias The Cypher node alias to use in property access (e.g., "e" for "e.property").
+ * @property paramPrefix Prefix for generated parameter names (default: "_filter_").
+ */
+class CypherFilterConverter(
+    private val nodeAlias: String = "e",
+    private val paramPrefix: String = "_filter_",
+) {
+
+    /**
+     * Converts a [PropertyFilter] to Cypher WHERE clause components.
+     *
+     * @param filter The filter to convert, or null for no filtering.
+     * @return [CypherFilterResult] with the WHERE clause and parameters.
+     */
+    fun convert(filter: PropertyFilter?): CypherFilterResult {
+        if (filter == null) return CypherFilterResult.EMPTY
+
+        val parameters = mutableMapOf<String, Any>()
+        val paramCounter = ParamCounter()
+        val whereClause = convertFilter(filter, parameters, paramCounter)
+        return CypherFilterResult(whereClause, parameters)
+    }
+
+    private class ParamCounter {
+        private var count = 0
+        fun next(): Int = count++
+    }
+
+    private fun convertFilter(
+        filter: PropertyFilter,
+        params: MutableMap<String, Any>,
+        counter: ParamCounter,
+    ): String = when (filter) {
+        is PropertyFilter.Eq -> {
+            val paramName = "$paramPrefix${counter.next()}"
+            params[paramName] = filter.value
+            "$nodeAlias.${filter.key} = \$$paramName"
+        }
+
+        is PropertyFilter.Ne -> {
+            val paramName = "$paramPrefix${counter.next()}"
+            params[paramName] = filter.value
+            "$nodeAlias.${filter.key} <> \$$paramName"
+        }
+
+        is PropertyFilter.Gt -> {
+            val paramName = "$paramPrefix${counter.next()}"
+            params[paramName] = filter.value
+            "$nodeAlias.${filter.key} > \$$paramName"
+        }
+
+        is PropertyFilter.Gte -> {
+            val paramName = "$paramPrefix${counter.next()}"
+            params[paramName] = filter.value
+            "$nodeAlias.${filter.key} >= \$$paramName"
+        }
+
+        is PropertyFilter.Lt -> {
+            val paramName = "$paramPrefix${counter.next()}"
+            params[paramName] = filter.value
+            "$nodeAlias.${filter.key} < \$$paramName"
+        }
+
+        is PropertyFilter.Lte -> {
+            val paramName = "$paramPrefix${counter.next()}"
+            params[paramName] = filter.value
+            "$nodeAlias.${filter.key} <= \$$paramName"
+        }
+
+        is PropertyFilter.In -> {
+            val paramName = "$paramPrefix${counter.next()}"
+            params[paramName] = filter.values
+            "$nodeAlias.${filter.key} IN \$$paramName"
+        }
+
+        is PropertyFilter.Nin -> {
+            val paramName = "$paramPrefix${counter.next()}"
+            params[paramName] = filter.values
+            "NOT $nodeAlias.${filter.key} IN \$$paramName"
+        }
+
+        is PropertyFilter.Contains -> {
+            val paramName = "$paramPrefix${counter.next()}"
+            params[paramName] = filter.value
+            "$nodeAlias.${filter.key} CONTAINS \$$paramName"
+        }
+
+        is PropertyFilter.And -> {
+            val clauses = filter.filters.map { convertFilter(it, params, counter) }
+            if (clauses.size == 1) {
+                clauses.first()
+            } else {
+                clauses.joinToString(" AND ") { "($it)" }
+            }
+        }
+
+        is PropertyFilter.Or -> {
+            val clauses = filter.filters.map { convertFilter(it, params, counter) }
+            if (clauses.size == 1) {
+                clauses.first()
+            } else {
+                clauses.joinToString(" OR ") { "($it)" }
+            }
+        }
+
+        is PropertyFilter.Not -> {
+            val inner = convertFilter(filter.filter, params, counter)
+            "NOT ($inner)"
+        }
+    }
+}

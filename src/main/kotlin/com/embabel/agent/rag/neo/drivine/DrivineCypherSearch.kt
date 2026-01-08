@@ -119,6 +119,27 @@ class DrivineCypherSearch @JvmOverloads constructor(
         )
     }
 
+    override fun chunkSimilaritySearchWithFilter(
+        purpose: String,
+        query: String,
+        params: Map<String, *>,
+        filterResult: CypherFilterResult,
+        logger: Logger?,
+    ): List<SimilarityResult<Chunk>> {
+        val loggerToUse = logger ?: this.logger
+        val baseCypher = if (query.contains(" ")) query else queryResolver.resolve(query)!!
+        val cypher = injectFilterIntoQuery(baseCypher, filterResult)
+        val mergedParams = params + filterResult.parameters
+        loggerToUse.info("[{}] query with filter\n\tparams: {}\n{}", purpose, mergedParams, cypher)
+
+        return persistenceManager.query(
+            QuerySpecification
+                .withStatement(cypher)
+                .bind(mergedParams)
+                .mapWith(chunkSimilarityMapper)
+        )
+    }
+
     override fun chunkFullTextSearch(
         purpose: String,
         query: String,
@@ -133,6 +154,27 @@ class DrivineCypherSearch @JvmOverloads constructor(
             QuerySpecification
                 .withStatement(cypher)
                 .bind(params)
+                .mapWith(chunkSimilarityMapper)
+        )
+    }
+
+    override fun chunkFullTextSearchWithFilter(
+        purpose: String,
+        query: String,
+        params: Map<String, *>,
+        filterResult: CypherFilterResult,
+        logger: Logger?,
+    ): List<SimilarityResult<Chunk>> {
+        val loggerToUse = logger ?: this.logger
+        val baseCypher = if (query.contains(" ")) query else queryResolver.resolve(query)!!
+        val cypher = injectFilterIntoQuery(baseCypher, filterResult)
+        val mergedParams = params + filterResult.parameters
+        loggerToUse.info("[{}] query with filter\n\tparams: {}\n{}", purpose, mergedParams, cypher)
+
+        return persistenceManager.query(
+            QuerySpecification
+                .withStatement(cypher)
+                .bind(mergedParams)
                 .mapWith(chunkSimilarityMapper)
         )
     }
@@ -230,5 +272,38 @@ class DrivineCypherSearch @JvmOverloads constructor(
 //            Cluster(anchor, similarityResults)
 //        }
         TODO()
+    }
+
+    /**
+     * Injects filter WHERE clause conditions into a Cypher query.
+     *
+     * This method finds the first WHERE clause in the query and appends the filter
+     * conditions with AND. If the filter is empty, the query is returned unchanged.
+     *
+     * @param query The original Cypher query
+     * @param filterResult The converted filter result
+     * @return The modified query with filter conditions injected
+     */
+    private fun injectFilterIntoQuery(
+        query: String,
+        filterResult: CypherFilterResult,
+    ): String {
+        if (filterResult.isEmpty()) return query
+
+        // Find WHERE clause and inject filter conditions
+        // Pattern: find "WHERE " followed by conditions, then inject our filter with AND
+        val wherePattern = Regex("(?i)(WHERE\\s+)", RegexOption.MULTILINE)
+        val match = wherePattern.find(query)
+
+        return if (match != null) {
+            // Insert filter conditions after WHERE keyword with AND
+            val insertPoint = match.range.last + 1
+            val filterClause = "(${filterResult.whereClause}) AND "
+            query.substring(0, insertPoint) + filterClause + query.substring(insertPoint)
+        } else {
+            // No WHERE clause found - this shouldn't happen for our queries but handle gracefully
+            logger.warn("No WHERE clause found in query, cannot inject filter: {}", query.take(100))
+            query
+        }
     }
 }

@@ -1,6 +1,7 @@
 package com.embabel.agent.rag.neo.drivine
 
 import com.embabel.agent.core.DataDictionary
+import com.embabel.agent.rag.filter.PropertyFilter
 import com.embabel.agent.rag.model.NamedEntity
 import com.embabel.agent.rag.model.NamedEntityData
 import com.embabel.agent.rag.neo.drivine.mappers.NamedEntityDataRowMapper
@@ -62,6 +63,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
     private val queryResolver: LogicalQueryResolver = FixedLocationLogicalQueryResolver(),
     private val namedEntityDataMapper: RowMapper<NamedEntityData> = NamedEntityDataRowMapper(),
     private val namedEntityDataSimilarityMapper: RowMapper<SimilarityResult<NamedEntityData>> = NamedEntityDataSimilarityMapper(),
+    private val filterConverter: CypherFilterConverter = CypherFilterConverter(nodeAlias = "e"),
     verifyIndexes: Boolean = true,
 ) : NamedEntityDataRepository {
 
@@ -77,6 +79,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         val requiredIndexes = listOf(properties.entityIndex, properties.entityFullTextIndex)
         try {
             val statement = "SHOW INDEXES YIELD name RETURN collect(name) AS indexNames"
+
             @Suppress("UNCHECKED_CAST")
             val existingIndexes = persistenceManager.getOne(
                 QuerySpecification
@@ -88,7 +91,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
             if (missingIndexes.isNotEmpty()) {
                 logger.warn(
                     "Required indexes not found: {}. Run DrivineStore.provision() to create them. " +
-                        "Search operations will fail until indexes are created.",
+                            "Search operations will fail until indexes are created.",
                     missingIndexes
                 )
             }
@@ -217,16 +220,29 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         )
     }
 
-    override fun textSearch(request: TextSimilaritySearchRequest): List<SimilarityResult<NamedEntityData>> {
-        logger.info("Executing text search: query='{}', topK={}", request.query, request.topK)
-        val statement = resolveQuery("named_entity_fulltext_search")
+
+    override fun textSearch(
+        request: TextSimilaritySearchRequest,
+        metadataFilter: PropertyFilter?,
+        propertyFilter: PropertyFilter?,
+    ): List<SimilarityResult<NamedEntityData>> {
+        logger.info(
+            "Executing text search: query='{}', topK={}, metadataFilter={}, propertyFilter={}",
+            request.query, request.topK, metadataFilter, propertyFilter
+        )
+        val baseStatement = resolveQuery("named_entity_fulltext_search")
+        // For NamedEntityData, both metadata and properties are node properties in Neo4j
+        // so we can combine them into a single Cypher filter
+        val combinedFilterResult = combineFilters(metadataFilter, propertyFilter)
+        val statement = injectFilterIntoQuery(baseStatement, combinedFilterResult, "e")
+
         val params = mapOf(
             "fulltextIndex" to properties.entityFullTextIndex,
             "searchText" to request.query,
             "similarityThreshold" to request.similarityThreshold,
             "topK" to request.topK,
             "entityNodeName" to properties.entityNodeName,
-        )
+        ) + combinedFilterResult.parameters
 
         val results = persistenceManager.query(
             QuerySpecification
@@ -238,17 +254,29 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         return results
     }
 
-    override fun vectorSearch(request: TextSimilaritySearchRequest): List<SimilarityResult<NamedEntityData>> {
+    override fun vectorSearch(
+        request: TextSimilaritySearchRequest,
+        metadataFilter: PropertyFilter?,
+        propertyFilter: PropertyFilter?,
+    ): List<SimilarityResult<NamedEntityData>> {
         val embedding = embeddingService.embed(request.query)
-        logger.info("Executing vector search: query='{}', topK={}", request.query, request.topK)
-        val statement = resolveQuery("named_entity_vector_search")
+        logger.info(
+            "Executing vector search: query='{}', topK={}, metadataFilter={}, propertyFilter={}",
+            request.query, request.topK, metadataFilter, propertyFilter
+        )
+        val baseStatement = resolveQuery("named_entity_vector_search")
+        // For NamedEntityData, both metadata and properties are node properties in Neo4j
+        // so we can combine them into a single Cypher filter
+        val combinedFilterResult = combineFilters(metadataFilter, propertyFilter)
+        val statement = injectFilterIntoQuery(baseStatement, combinedFilterResult, "e")
+
         val params = mapOf(
             "vectorIndex" to properties.entityIndex,
             "queryVector" to embedding,
             "similarityThreshold" to request.similarityThreshold,
             "topK" to request.topK,
             "entityNodeName" to properties.entityNodeName,
-        )
+        ) + combinedFilterResult.parameters
 
         val results = persistenceManager.query(
             QuerySpecification
@@ -258,6 +286,25 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         )
         logger.info("{} vector search results for query '{}'", results.size, request.query)
         return results
+    }
+
+    /**
+     * Combines metadata and property filters into a single CypherFilterResult.
+     * For NamedEntityData in Neo4j, both are stored as node properties,
+     * so both can be translated to native Cypher WHERE clauses.
+     */
+    private fun combineFilters(
+        metadataFilter: PropertyFilter?,
+        propertyFilter: PropertyFilter?,
+    ): CypherFilterResult {
+        val combinedFilter = when {
+            metadataFilter != null && propertyFilter != null ->
+                PropertyFilter.And(listOf(metadataFilter, propertyFilter))
+            metadataFilter != null -> metadataFilter
+            propertyFilter != null -> propertyFilter
+            else -> null
+        }
+        return filterConverter.convert(combinedFilter)
     }
 
     private fun namedEntityQuery(whereClause: String): String =
@@ -275,4 +322,39 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
 
     private fun resolveQuery(name: String): String =
         queryResolver.resolve(name) ?: error("Could not resolve query: $name")
+
+    /**
+     * Injects filter WHERE clause conditions into a Cypher query.
+     *
+     * This method finds the first WHERE clause in the query and appends the filter
+     * conditions with AND. If the filter is empty, the query is returned unchanged.
+     *
+     * @param query The original Cypher query
+     * @param filterResult The converted filter result
+     * @param nodeAlias The node alias used in the query (for logging/debugging)
+     * @return The modified query with filter conditions injected
+     */
+    private fun injectFilterIntoQuery(
+        query: String,
+        filterResult: CypherFilterResult,
+        @Suppress("UNUSED_PARAMETER") nodeAlias: String,
+    ): String {
+        if (filterResult.isEmpty()) return query
+
+        // Find WHERE clause and inject filter conditions
+        // Pattern: find "WHERE " followed by conditions, then inject our filter with AND
+        val wherePattern = Regex("(?i)(WHERE\\s+)", RegexOption.MULTILINE)
+        val match = wherePattern.find(query)
+
+        return if (match != null) {
+            // Insert filter conditions after WHERE keyword with AND
+            val insertPoint = match.range.last + 1
+            val filterClause = "(${filterResult.whereClause}) AND "
+            query.substring(0, insertPoint) + filterClause + query.substring(insertPoint)
+        } else {
+            // No WHERE clause found - this shouldn't happen for our queries but handle gracefully
+            logger.warn("No WHERE clause found in query, appending filter at end: {}", query.take(100))
+            query
+        }
+    }
 }

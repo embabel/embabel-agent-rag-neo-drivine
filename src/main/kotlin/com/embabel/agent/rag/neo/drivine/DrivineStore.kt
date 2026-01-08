@@ -1,11 +1,12 @@
 package com.embabel.agent.rag.neo.drivine
 
 import com.embabel.agent.api.common.Embedding
+import com.embabel.agent.rag.filter.PropertyFilter
 import com.embabel.agent.rag.ingestion.RetrievableEnhancer
 import com.embabel.agent.rag.model.*
 import com.embabel.agent.rag.neo.drivine.mappers.DefaultContentElementRowMapper
 import com.embabel.agent.rag.neo.drivine.model.ContentElementRepositoryInfoImpl
-import com.embabel.agent.rag.service.CoreSearchOperations
+import com.embabel.agent.rag.service.*
 import com.embabel.agent.rag.service.EntitySearch
 import com.embabel.agent.rag.service.RagRequest
 import com.embabel.agent.rag.service.ResultExpander
@@ -39,8 +40,9 @@ class DrivineStore @JvmOverloads constructor(
     private val cypherSearch: CypherSearch,
     override val enhancers: List<RetrievableEnhancer> = emptyList(),
     private val contentElementMapper: RowMapper<ContentElement> = DefaultContentElementRowMapper(),
+    private val chunkFilterConverter: CypherFilterConverter = CypherFilterConverter(nodeAlias = "chunk"),
 ) : AbstractChunkingContentElementRepository(properties, embeddingService), ChunkingContentElementRepository, RagFacetProvider,
-    CoreSearchOperations, ResultExpander {
+    CoreSearchOperations, FilteringVectorSearch, FilteringTextSearch, ResultExpander {
 
     override val name get() = properties.name
 
@@ -406,6 +408,93 @@ class DrivineStore @JvmOverloads constructor(
         )
         @Suppress("UNCHECKED_CAST")
         return results as List<SimilarityResult<T>>
+    }
+
+    override fun <T : Retrievable> vectorSearchWithFilter(
+        request: TextSimilaritySearchRequest,
+        clazz: Class<T>,
+        metadataFilter: PropertyFilter?,
+        propertyFilter: PropertyFilter?,
+    ): List<SimilarityResult<T>> {
+        if (clazz != Chunk::class.java) {
+            throw IllegalArgumentException("DrivineStore vectorSearchWithFilter only supports Chunk class, got: $clazz")
+        }
+        // In Neo4j, chunk metadata is stored as node properties, so both filters can use native Cypher
+        val filterResult = combineFilters(metadataFilter, propertyFilter)
+        logger.info(
+            "Performing vector search with filter: query='{}', topK={}, metadataFilter={}, propertyFilter={}",
+            request.query, request.topK, metadataFilter, propertyFilter
+        )
+        @Suppress("UNCHECKED_CAST")
+        return chunkSimilaritySearchWithFilter(
+            request,
+            embeddingFor(request.query),
+            filterResult,
+        ) as List<SimilarityResult<T>>
+    }
+
+    override fun <T : Retrievable> textSearchWithFilter(
+        request: TextSimilaritySearchRequest,
+        clazz: Class<T>,
+        metadataFilter: PropertyFilter?,
+        propertyFilter: PropertyFilter?,
+    ): List<SimilarityResult<T>> {
+        // In Neo4j, chunk metadata is stored as node properties, so both filters can use native Cypher
+        val filterResult = combineFilters(metadataFilter, propertyFilter)
+        logger.info(
+            "Performing text search with filter: query='{}', topK={}, metadataFilter={}, propertyFilter={}",
+            request.query, request.topK, metadataFilter, propertyFilter
+        )
+        val results = cypherSearch.chunkFullTextSearchWithFilter(
+            purpose = "Chunk full text search with filter",
+            query = "chunk_fulltext_search",
+            params = commonParameters(request) + mapOf(
+                "fulltextIndex" to properties.contentElementFullTextIndex,
+                "searchText" to request.query,
+            ),
+            filterResult = filterResult,
+            logger = logger,
+        )
+        @Suppress("UNCHECKED_CAST")
+        return results as List<SimilarityResult<T>>
+    }
+
+    /**
+     * Combines metadata and property filters into a single CypherFilterResult.
+     * In Neo4j, chunk metadata is stored as node properties (anything not in CORE_PROPERTIES),
+     * so both filter types can be translated to native Cypher WHERE clauses.
+     */
+    private fun combineFilters(
+        metadataFilter: PropertyFilter?,
+        propertyFilter: PropertyFilter?,
+    ): CypherFilterResult {
+        val combinedFilter = when {
+            metadataFilter != null && propertyFilter != null ->
+                PropertyFilter.And(listOf(metadataFilter, propertyFilter))
+            metadataFilter != null -> metadataFilter
+            propertyFilter != null -> propertyFilter
+            else -> null
+        }
+        return chunkFilterConverter.convert(combinedFilter)
+    }
+
+    private fun chunkSimilaritySearchWithFilter(
+        request: TextSimilaritySearchRequest,
+        embedding: Embedding,
+        filterResult: CypherFilterResult,
+    ): List<SimilarityResult<Chunk>> {
+        val results = cypherSearch.chunkSimilaritySearchWithFilter(
+            "Chunk similarity search with filter",
+            query = "chunk_vector_search",
+            params = commonParameters(request) + mapOf(
+                "vectorIndex" to properties.contentElementIndex,
+                "queryVector" to embedding,
+            ),
+            filterResult = filterResult,
+            logger = logger,
+        )
+        logger.info("{} chunk similarity results for query '{}' with filter", results.size, request.query)
+        return results
     }
 
     private fun entitySearch(
