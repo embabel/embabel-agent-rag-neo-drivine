@@ -9,16 +9,22 @@
 //   (Chunk)-[:NEXT_CHUNK]->(next Chunk)
 
 // Create FIRST_CHUNK relationship from parent to first chunk
-MATCH (parent {id: $parentId})
-WHERE 'Document' IN labels(parent) OR 'ContentRoot' IN labels(parent)
-WITH parent, $chunkIds AS chunkIds
-WHERE size(chunkIds) > 0
-MATCH (firstChunk:Chunk {id: chunkIds[0]})
-MERGE (parent)-[:FIRST_CHUNK]->(firstChunk)
+CALL {
+    WITH $parentId AS parentId, $chunkIds AS chunkIds
+    MATCH (parent {id: parentId})
+    WHERE ('Document' IN labels(parent) OR 'ContentRoot' IN labels(parent))
+      AND size(chunkIds) > 0
+    MATCH (firstChunk:Chunk {id: chunkIds[0]})
+    MERGE (parent)-[:FIRST_CHUNK]->(firstChunk)
+}
 
 // Create NEXT_CHUNK relationships between consecutive chunks
-WITH chunkIds
-UNWIND range(0, size(chunkIds) - 2) AS i
-MATCH (current:Chunk {id: chunkIds[i]})
-MATCH (next:Chunk {id: chunkIds[i + 1]})
-MERGE (current)-[:NEXT_CHUNK]->(next);
+CALL {
+    WITH $chunkIds AS chunkIds
+    WHERE size(chunkIds) > 1
+    UNWIND range(0, size(chunkIds) - 2) AS i
+    WITH chunkIds, i
+    MATCH (current:Chunk {id: chunkIds[i]})
+    MATCH (next:Chunk {id: chunkIds[i + 1]})
+    MERGE (current)-[:NEXT_CHUNK]->(next)
+}
