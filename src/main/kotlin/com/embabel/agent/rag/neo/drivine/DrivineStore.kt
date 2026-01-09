@@ -67,7 +67,37 @@ class DrivineStore @JvmOverloads constructor(
     }
 
     override fun createInternalRelationships(root: NavigableDocument) {
-        println("TODO: createRelationships not yet implemented")
+        // Create HAS_PARENT and PART_OF relationships via batch Cypher
+        cypherSearch.query(
+            purpose = "Create content element relationships",
+            query = "create_content_element_relationships",
+            params = emptyMap<String, Any>()
+        )
+
+        // Get all chunks from the document in order and group by parentId
+        val chunks = root.descendants().filterIsInstance<Chunk>().toList()
+        val chunksByParent = chunks.groupBy { it.parentId }
+
+        // Create FIRST_CHUNK and NEXT_CHUNK relationships for each parent
+        for ((parentId, parentChunks) in chunksByParent) {
+            if (parentChunks.isEmpty()) continue
+
+            val chunkIds = parentChunks.map { it.id }
+            cypherSearch.query(
+                purpose = "Create chunk linked list for parent $parentId",
+                query = "create_chunk_linked_list",
+                params = mapOf(
+                    "parentId" to parentId,
+                    "chunkIds" to chunkIds
+                )
+            )
+        }
+
+        logger.info(
+            "Created content hierarchy relationships for {} chunks across {} parents",
+            chunks.size,
+            chunksByParent.size
+        )
     }
 
     override fun deleteRootAndDescendants(uri: String): DocumentDeletionResult? {
