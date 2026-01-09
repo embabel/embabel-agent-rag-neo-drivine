@@ -6,4 +6,3 @@
 MATCH (current:Chunk {id: $currentChunkId})
 MATCH (next:Chunk {id: $nextChunkId})
 MERGE (current)-[:NEXT_CHUNK]->(next)
-RETURN count(*) AS created

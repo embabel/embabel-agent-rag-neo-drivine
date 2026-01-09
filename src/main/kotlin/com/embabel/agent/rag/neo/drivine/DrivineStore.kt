@@ -74,8 +74,17 @@ class DrivineStore @JvmOverloads constructor(
             params = emptyMap<String, Any>()
         )
 
-        // Get all chunks from the document in order and group by parentId
-        val chunks = root.descendants().filterIsInstance<Chunk>().toList()
+        // Get all leaf section IDs from the document tree
+        val leafSectionIds = root.descendants()
+            .filterIsInstance<HierarchicalContentElement>()
+            .map { it.id }
+            .toSet() + root.id
+
+        // Query chunks from database that belong to this document's sections
+        val chunks = leafSectionIds.flatMap { parentId ->
+            findChunksByParentId(parentId)
+        }
+
         val chunksByParent = chunks.groupBy { it.parentId }
 
         // Create relationships for each parent group
@@ -311,6 +320,29 @@ class DrivineStore @JvmOverloads constructor(
                     metadata = emptyMap(), //TODO Can it ever be populated?
                 )
             })
+        return persistenceManager.query(spec)
+    }
+
+    private fun findChunksByParentId(parentId: String): List<Chunk> {
+        val statement = """
+            MATCH (chunk:Chunk {parentId: ${'$'}parentId})
+            RETURN properties(chunk) AS props
+            ORDER BY chunk.id
+            """.trimIndent()
+        val spec = QuerySpecification
+            .withStatement(statement)
+            .bind(mapOf("parentId" to parentId))
+            .transform(Map::class.java)
+            .map { props ->
+                @Suppress("UNCHECKED_CAST")
+                val p = props as Map<String, Any?>
+                Chunk(
+                    id = p["id"] as String,
+                    text = p["text"] as String,
+                    parentId = p["parentId"] as String,
+                    metadata = emptyMap(),
+                )
+            }
         return persistenceManager.query(spec)
     }
 

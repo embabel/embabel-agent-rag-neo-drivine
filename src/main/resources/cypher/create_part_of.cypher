@@ -1,11 +1,9 @@
-// Create PART_OF relationship from Chunk to its parent Document.
+// Create PART_OF relationship from Chunk to its parent.
 // Aligns with Neo4j LLM Graph Builder convention.
 // Parameters:
 //   chunkId: The ID of the chunk
-//   parentId: The ID of the parent document
+//   parentId: The ID of the parent (Document, Section, or LeafSection)
 
 MATCH (chunk:Chunk {id: $chunkId})
-MATCH (parent {id: $parentId})
-WHERE 'Document' IN labels(parent) OR 'ContentRoot' IN labels(parent)
+MATCH (parent:ContentElement {id: $parentId})
 MERGE (chunk)-[:PART_OF]->(parent)
-RETURN count(*) AS created
