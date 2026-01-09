@@ -78,19 +78,44 @@ class DrivineStore @JvmOverloads constructor(
         val chunks = root.descendants().filterIsInstance<Chunk>().toList()
         val chunksByParent = chunks.groupBy { it.parentId }
 
-        // Create FIRST_CHUNK and NEXT_CHUNK relationships for each parent
+        // Create relationships for each parent group
         for ((parentId, parentChunks) in chunksByParent) {
             if (parentChunks.isEmpty()) continue
 
-            val chunkIds = parentChunks.map { it.id }
+            // Create PART_OF relationships for each chunk
+            for (chunk in parentChunks) {
+                cypherSearch.query(
+                    purpose = "Create PART_OF for chunk ${chunk.id}",
+                    query = "create_part_of",
+                    params = mapOf(
+                        "chunkId" to chunk.id,
+                        "parentId" to parentId
+                    )
+                )
+            }
+
+            // Create FIRST_CHUNK relationship
+            val firstChunk = parentChunks.first()
             cypherSearch.query(
-                purpose = "Create chunk linked list for parent $parentId",
-                query = "create_chunk_linked_list",
+                purpose = "Create FIRST_CHUNK for parent $parentId",
+                query = "create_first_chunk",
                 params = mapOf(
                     "parentId" to parentId,
-                    "chunkIds" to chunkIds
+                    "firstChunkId" to firstChunk.id
                 )
             )
+
+            // Create NEXT_CHUNK relationships between consecutive chunks
+            for (i in 0 until parentChunks.size - 1) {
+                cypherSearch.query(
+                    purpose = "Create NEXT_CHUNK ${parentChunks[i].id} -> ${parentChunks[i + 1].id}",
+                    query = "create_next_chunk",
+                    params = mapOf(
+                        "currentChunkId" to parentChunks[i].id,
+                        "nextChunkId" to parentChunks[i + 1].id
+                    )
+                )
+            }
         }
 
         logger.info(

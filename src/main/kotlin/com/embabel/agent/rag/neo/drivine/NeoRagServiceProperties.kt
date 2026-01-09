@@ -16,6 +16,7 @@
 package com.embabel.agent.rag.neo.drivine
 
 import com.embabel.agent.rag.ingestion.ContentChunker
+import com.embabel.agent.rag.model.RetrievableEntity
 import org.springframework.boot.context.properties.ConfigurationProperties
 
 /**
@@ -26,7 +27,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 class NeoRagServiceProperties : ContentChunker.Config {
 
     var chunkNodeName: String = "Chunk"
-    var entityNodeName: String = "Entity"
+    var entityNodeName: String = RetrievableEntity.ENTITY_LABEL
     var name: String = "OgmRagService"
     var description: String = "RAG service using Neo4j OGM for querying and embedding"
     var contentElementIndex: String = "embabel-content-index"
