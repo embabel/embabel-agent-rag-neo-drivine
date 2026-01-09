@@ -6,7 +6,7 @@ import com.embabel.agent.rag.model.NamedEntity
 import com.embabel.agent.rag.model.NamedEntityData
 import com.embabel.agent.rag.neo.drivine.mappers.NamedEntityDataRowMapper
 import com.embabel.agent.rag.neo.drivine.mappers.NamedEntityDataSimilarityMapper
-import com.embabel.agent.rag.service.EntityIdentifier
+import com.embabel.agent.rag.service.RetrievableIdentifier
 import com.embabel.agent.rag.service.NamedEntityDataRepository
 import com.embabel.agent.rag.service.RelationshipData
 import com.embabel.common.ai.model.EmbeddingService
@@ -104,8 +104,8 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         get() = "Full support"
 
     override fun createRelationship(
-        a: EntityIdentifier,
-        b: EntityIdentifier,
+        a: RetrievableIdentifier,
+        b: RetrievableIdentifier,
         relationship: RelationshipData
     ) {
         logger.debug(
