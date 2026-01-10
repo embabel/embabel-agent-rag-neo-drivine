@@ -15,7 +15,6 @@
  */
 package com.embabel.agent.rag.neo.drivine
 
-import com.embabel.agent.rag.ingestion.ContentChunker
 import com.embabel.agent.rag.model.RetrievableEntity
 import org.springframework.boot.context.properties.ConfigurationProperties
 
@@ -24,20 +23,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties
  * @param entityNodeName the name of a node representing an entity in the knowledge graph
  */
 @ConfigurationProperties(prefix = "embabel.agent.rag.neo")
-class NeoRagServiceProperties : ContentChunker.Config {
+class NeoRagServiceProperties {
 
     var chunkNodeName: String = "Chunk"
     var entityNodeName: String = RetrievableEntity.ENTITY_LABEL
-    var name: String = "OgmRagService"
-    var description: String = "RAG service using Neo4j OGM for querying and embedding"
+    var name: String = "DrivineRagService"
+    var description: String = "Neo RAG service using Drivine for querying and embedding"
     var contentElementIndex: String = "embabel-content-index"
     var entityIndex: String = "embabel-entity-index"
     var contentElementFullTextIndex: String = "embabel-content-fulltext-index"
     var entityFullTextIndex: String = "embabel-entity-fulltext-index"
 
-    override var maxChunkSize: Int = 1500
-    override var overlapSize: Int = 200
-    override var embeddingBatchSize = 500
 
-    override var includeSectionTitleInChunk: Boolean = false
 }

@@ -2,14 +2,13 @@ package com.embabel.agent.rag.neo.drivine
 
 import com.embabel.agent.api.common.Embedding
 import com.embabel.agent.rag.filter.PropertyFilter
+import com.embabel.agent.rag.ingestion.ChunkTransformer
+import com.embabel.agent.rag.ingestion.ContentChunker
 import com.embabel.agent.rag.ingestion.RetrievableEnhancer
 import com.embabel.agent.rag.model.*
 import com.embabel.agent.rag.neo.drivine.mappers.DefaultContentElementRowMapper
 import com.embabel.agent.rag.neo.drivine.model.ContentElementRepositoryInfoImpl
 import com.embabel.agent.rag.service.*
-import com.embabel.agent.rag.service.EntitySearch
-import com.embabel.agent.rag.service.RagRequest
-import com.embabel.agent.rag.service.ResultExpander
 import com.embabel.agent.rag.service.support.FunctionRagFacet
 import com.embabel.agent.rag.service.support.RagFacet
 import com.embabel.agent.rag.service.support.RagFacetProvider
@@ -18,9 +17,7 @@ import com.embabel.agent.rag.store.AbstractChunkingContentElementRepository
 import com.embabel.agent.rag.store.ChunkingContentElementRepository
 import com.embabel.agent.rag.store.ContentElementRepositoryInfo
 import com.embabel.agent.rag.store.DocumentDeletionResult
-import com.embabel.common.ai.model.DefaultModelSelectionCriteria
 import com.embabel.common.ai.model.EmbeddingService
-import com.embabel.common.ai.model.ModelProvider
 import com.embabel.common.core.types.SimilarityCutoff
 import com.embabel.common.core.types.SimilarityResult
 import com.embabel.common.core.types.TextSimilaritySearchRequest
@@ -35,13 +32,19 @@ import org.springframework.transaction.support.TransactionTemplate
 class DrivineStore @JvmOverloads constructor(
     val persistenceManager: PersistenceManager,
     val properties: NeoRagServiceProperties,
+    chunkerConfig: ContentChunker.Config,
+    chunkTransformer: ChunkTransformer,
     embeddingService: EmbeddingService,
     platformTransactionManager: PlatformTransactionManager,
     private val cypherSearch: CypherSearch,
     override val enhancers: List<RetrievableEnhancer> = emptyList(),
     private val contentElementMapper: RowMapper<ContentElement> = DefaultContentElementRowMapper(),
     private val chunkFilterConverter: CypherFilterConverter = CypherFilterConverter(nodeAlias = "chunk"),
-) : AbstractChunkingContentElementRepository(properties, embeddingService), ChunkingContentElementRepository, RagFacetProvider,
+) : AbstractChunkingContentElementRepository(
+    chunkerConfig = chunkerConfig,
+    chunkTransformer = chunkTransformer,
+    embeddingService = embeddingService,
+), ChunkingContentElementRepository, RagFacetProvider,
     CoreSearchOperations, FilteringVectorSearch, FilteringTextSearch, ResultExpander {
 
     override val name get() = properties.name
@@ -313,9 +316,10 @@ class DrivineStore @JvmOverloads constructor(
             .bind(mapOf("entityId" to entityId))
             .transform(Map::class.java)
             .map({
-                Chunk(
+                Chunk.create(
                     id = it["id"] as String,
                     text = it["text"] as String,
+                    urtext = it["urtext"] as? String ?: it["text"] as String,
                     parentId = it["parentId"] as String,
                     metadata = emptyMap(), //TODO Can it ever be populated?
                 )
@@ -336,9 +340,10 @@ class DrivineStore @JvmOverloads constructor(
             .map { props ->
                 @Suppress("UNCHECKED_CAST")
                 val p = props as Map<String, Any?>
-                Chunk(
+                Chunk.create(
                     id = p["id"] as String,
                     text = p["text"] as String,
+                    urtext = p["urtext"] as? String ?: p["text"] as String,
                     parentId = p["parentId"] as String,
                     metadata = emptyMap(),
                 )
@@ -558,6 +563,7 @@ class DrivineStore @JvmOverloads constructor(
         val combinedFilter = when {
             metadataFilter != null && propertyFilter != null ->
                 PropertyFilter.And(listOf(metadataFilter, propertyFilter))
+
             metadataFilter != null -> metadataFilter
             propertyFilter != null -> propertyFilter
             else -> null
