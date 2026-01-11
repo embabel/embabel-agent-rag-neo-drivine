@@ -34,5 +34,7 @@ class NeoRagServiceProperties {
     var contentElementFullTextIndex: String = "embabel-content-fulltext-index"
     var entityFullTextIndex: String = "embabel-entity-fulltext-index"
 
-
+    override fun toString(): String {
+        return "${javaClass.simpleName}(chunkNodeName='$chunkNodeName', entityNodeName='$entityNodeName', name='$name', description='$description', contentElementIndex='$contentElementIndex', entityIndex='$entityIndex', contentElementFullTextIndex='$contentElementFullTextIndex', entityFullTextIndex='$entityFullTextIndex')"
+    }
 }

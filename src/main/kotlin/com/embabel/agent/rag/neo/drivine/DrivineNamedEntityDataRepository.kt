@@ -4,6 +4,7 @@ import com.embabel.agent.core.DataDictionary
 import com.embabel.agent.rag.filter.PropertyFilter
 import com.embabel.agent.rag.model.NamedEntity
 import com.embabel.agent.rag.model.NamedEntityData
+import com.embabel.agent.rag.model.RelationshipDirection
 import com.embabel.agent.rag.neo.drivine.mappers.NamedEntityDataRowMapper
 import com.embabel.agent.rag.neo.drivine.mappers.NamedEntityDataSimilarityMapper
 import com.embabel.agent.rag.service.RetrievableIdentifier
@@ -184,6 +185,56 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
                 .bind(mapOf("label" to label))
                 .mapWith(namedEntityDataMapper)
         )
+    }
+
+    override fun findRelated(
+        source: RetrievableIdentifier,
+        relationshipName: String,
+        direction: RelationshipDirection,
+    ): List<NamedEntityData> {
+        logger.debug("Finding related entities: source={}, relationship={}, direction={}", source, relationshipName, direction)
+        val sourceLabel = source.type
+        val statement = when (direction) {
+            RelationshipDirection.OUTGOING -> """
+                MATCH (source:$sourceLabel {id: ${'$'}entityId})-[:$relationshipName]->(target:${properties.entityNodeName})
+                RETURN {
+                    id: target.id,
+                    name: COALESCE(target.name, ''),
+                    description: COALESCE(target.description, ''),
+                    labels: labels(target),
+                    properties: properties(target)
+                } AS result
+            """.trimIndent()
+            RelationshipDirection.INCOMING -> """
+                MATCH (source:$sourceLabel {id: ${'$'}entityId})<-[:$relationshipName]-(target:${properties.entityNodeName})
+                RETURN {
+                    id: target.id,
+                    name: COALESCE(target.name, ''),
+                    description: COALESCE(target.description, ''),
+                    labels: labels(target),
+                    properties: properties(target)
+                } AS result
+            """.trimIndent()
+            RelationshipDirection.BOTH -> """
+                MATCH (source:$sourceLabel {id: ${'$'}entityId})-[:$relationshipName]-(target:${properties.entityNodeName})
+                RETURN {
+                    id: target.id,
+                    name: COALESCE(target.name, ''),
+                    description: COALESCE(target.description, ''),
+                    labels: labels(target),
+                    properties: properties(target)
+                } AS result
+            """.trimIndent()
+        }
+
+        val results = persistenceManager.query(
+            QuerySpecification
+                .withStatement(statement)
+                .bind(mapOf("entityId" to source.id))
+                .mapWith(namedEntityDataMapper)
+        )
+        logger.debug("Found {} related entities for source={}, relationship={}", results.size, source, relationshipName)
+        return results
     }
 
     override fun save(entity: NamedEntityData): NamedEntityData {
