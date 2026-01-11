@@ -240,9 +240,17 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
     override fun save(entity: NamedEntityData): NamedEntityData {
         logger.debug("Saving entity: id={}, name={}", entity.id, entity.name)
         val labels = (entity.labels() + properties.entityNodeName).distinct()
-        val labelsString = labels.joinToString(":")
+        // MERGE only on base entity label + id to avoid creating duplicates when labels change.
+        // Then SET additional labels separately.
+        val additionalLabels = labels.filter { it != properties.entityNodeName }
+        val setLabelsClause = if (additionalLabels.isNotEmpty()) {
+            "SET e:" + additionalLabels.joinToString(":")
+        } else {
+            ""
+        }
         val statement = """
-            MERGE (e:$labelsString {id: ${'$'}id})
+            MERGE (e:${properties.entityNodeName} {id: ${'$'}id})
+            $setLabelsClause
             SET e.name = ${'$'}name,
                 e.description = ${'$'}description,
                 e.lastModifiedDate = timestamp()
