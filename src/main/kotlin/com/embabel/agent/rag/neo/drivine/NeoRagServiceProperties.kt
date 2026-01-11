@@ -15,7 +15,7 @@
  */
 package com.embabel.agent.rag.neo.drivine
 
-import com.embabel.agent.rag.model.RetrievableEntity
+import com.embabel.agent.rag.model.NamedEntityData
 import org.springframework.boot.context.properties.ConfigurationProperties
 
 /**
@@ -26,7 +26,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 class NeoRagServiceProperties {
 
     var chunkNodeName: String = "Chunk"
-    var entityNodeName: String = RetrievableEntity.ENTITY_LABEL
+    var entityNodeName: String = NamedEntityData.ENTITY_LABEL
     var name: String = "DrivineRagService"
     var description: String = "Neo RAG service using Drivine for querying and embedding"
     var contentElementIndex: String = "embabel-content-index"

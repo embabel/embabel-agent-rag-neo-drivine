@@ -633,7 +633,7 @@ class DrivineStore @JvmOverloads constructor(
         request: SimilarityCutoff,
         embedding: FloatArray,
         labels: Set<String>,
-    ): List<SimilarityResult<out EntityData>> {
+    ): List<SimilarityResult<out NamedEntityData>> {
         return cypherSearch.entityDataSimilaritySearch(
             purpose = "Mapped entity search",
             query = "entity_vector_search",

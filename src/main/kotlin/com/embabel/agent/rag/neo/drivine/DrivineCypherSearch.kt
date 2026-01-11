@@ -2,13 +2,12 @@ package com.embabel.agent.rag.neo.drivine
 
 import com.embabel.agent.rag.model.Chunk
 import com.embabel.agent.rag.model.ContentElement
-import com.embabel.agent.rag.model.EntityData
 import com.embabel.agent.rag.model.NamedEntityData
 import com.embabel.agent.rag.model.Retrievable
 import com.embabel.agent.rag.neo.drivine.mappers.ChunkSimilarityMapper
 import com.embabel.agent.rag.neo.drivine.mappers.DefaultContentElementRowMapper
-import com.embabel.agent.rag.neo.drivine.mappers.EntityDataRowMapper
-import com.embabel.agent.rag.neo.drivine.mappers.EntityDataSimilarityMapper
+import com.embabel.agent.rag.neo.drivine.mappers.NamedEntityDataRowMapper
+import com.embabel.agent.rag.neo.drivine.mappers.NamedEntityDataSimilarityMapper
 import com.embabel.agent.rag.service.Cluster
 import com.embabel.agent.rag.service.ClusterFinder
 import com.embabel.agent.rag.service.ClusterRetrievalRequest
@@ -23,8 +22,8 @@ import org.springframework.transaction.annotation.Transactional
 class DrivineCypherSearch @JvmOverloads constructor(
     private val persistenceManager: PersistenceManager,
     private val queryResolver: LogicalQueryResolver = FixedLocationLogicalQueryResolver(),
-    private val entityDataMapper: RowMapper<EntityData> = EntityDataRowMapper(),
-    private val entityDataSimilarityMapper: RowMapper<SimilarityResult<EntityData>> = EntityDataSimilarityMapper(),
+    private val namedEntityDataMapper: RowMapper<NamedEntityData> = NamedEntityDataRowMapper(),
+    private val namedEntityDataSimilarityMapper: RowMapper<SimilarityResult<NamedEntityData>> = NamedEntityDataSimilarityMapper(),
     private val chunkSimilarityMapper: RowMapper<SimilarityResult<Chunk>> = ChunkSimilarityMapper(),
 ) : CypherSearch, ClusterFinder {
 
@@ -69,7 +68,7 @@ class DrivineCypherSearch @JvmOverloads constructor(
         query: String,
         params: Map<String, *>,
         logger: Logger?,
-    ): List<EntityData> {
+    ): List<NamedEntityData> {
         val loggerToUse = logger ?: this.logger
         val cypher = if (query.contains(" ")) query else queryResolver.resolve(query)!!
         loggerToUse.info("[{}] query\n\tparams: {}\n{}", purpose, params, cypher)
@@ -78,7 +77,7 @@ class DrivineCypherSearch @JvmOverloads constructor(
             QuerySpecification
                 .withStatement(cypher)
                 .bind(params)
-                .mapWith(entityDataMapper)
+                .mapWith(namedEntityDataMapper)
         )
     }
 
@@ -87,7 +86,7 @@ class DrivineCypherSearch @JvmOverloads constructor(
         query: String,
         params: Map<String, *>,
         logger: Logger?,
-    ): List<SimilarityResult<EntityData>> {
+    ): List<SimilarityResult<NamedEntityData>> {
         val loggerToUse = logger ?: this.logger
         val cypher = if (query.contains(" ")) query else queryResolver.resolve(query)!!
         loggerToUse.info("[{}] query\n\tparams: {}\n{}", purpose, params, cypher)
@@ -97,7 +96,7 @@ class DrivineCypherSearch @JvmOverloads constructor(
             QuerySpecification
                 .withStatement(cypher)
                 .bind(params)
-                .mapWith(entityDataSimilarityMapper)
+                .mapWith(namedEntityDataSimilarityMapper)
         )
     }
 
@@ -184,7 +183,7 @@ class DrivineCypherSearch @JvmOverloads constructor(
         query: String,
         params: Map<String, *>,
         logger: Logger?,
-    ): List<SimilarityResult<EntityData>> {
+    ): List<SimilarityResult<NamedEntityData>> {
         val loggerToUse = logger ?: this.logger
         val cypher = if (query.contains(" ")) query else queryResolver.resolve(query)!!
         loggerToUse.info("[{}] query\n\tparams: {}\n{}", purpose, params, cypher)
@@ -193,7 +192,7 @@ class DrivineCypherSearch @JvmOverloads constructor(
             QuerySpecification
                 .withStatement(cypher)
                 .bind(params)
-                .mapWith(entityDataSimilarityMapper)
+                .mapWith(namedEntityDataSimilarityMapper)
         )
     }
 

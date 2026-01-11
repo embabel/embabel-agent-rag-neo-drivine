@@ -16,7 +16,6 @@
 package com.embabel.agent.rag.neo.drivine
 
 import com.embabel.agent.rag.model.Chunk
-import com.embabel.agent.rag.model.EntityData
 import com.embabel.agent.rag.model.NamedEntityData
 import com.embabel.agent.rag.model.Retrievable
 import com.embabel.common.core.types.SimilarityResult
@@ -52,7 +51,7 @@ interface CypherSearch {
         query: String,
         params: Map<String, *> = emptyMap<String, String>(),
         logger: Logger? = null,
-    ): List<EntityData>
+    ): List<NamedEntityData>
 
     fun chunkSimilaritySearch(
         purpose: String,
@@ -74,7 +73,7 @@ interface CypherSearch {
         query: String,
         params: Map<String, *> = emptyMap<String, String>(),
         logger: Logger? = null,
-    ): List<SimilarityResult<out EntityData>>
+    ): List<SimilarityResult<out NamedEntityData>>
 
     fun chunkFullTextSearch(
         purpose: String,
@@ -96,7 +95,7 @@ interface CypherSearch {
         query: String,
         params: Map<String, *>,
         logger: Logger?,
-    ): List<SimilarityResult<out EntityData>>
+    ): List<SimilarityResult<out NamedEntityData>>
 
     fun queryForInt(
         query: String,
