@@ -1,15 +1,16 @@
 package com.embabel.agent.rag.neo.drivine
 
 import com.embabel.agent.core.DataDictionary
+import com.embabel.agent.rag.filter.EntityFilter
 import com.embabel.agent.rag.filter.PropertyFilter
 import com.embabel.agent.rag.model.NamedEntity
 import com.embabel.agent.rag.model.NamedEntityData
 import com.embabel.agent.rag.model.RelationshipDirection
 import com.embabel.agent.rag.neo.drivine.mappers.NamedEntityDataRowMapper
 import com.embabel.agent.rag.neo.drivine.mappers.NamedEntityDataSimilarityMapper
-import com.embabel.agent.rag.service.RetrievableIdentifier
 import com.embabel.agent.rag.service.NamedEntityDataRepository
 import com.embabel.agent.rag.service.RelationshipData
+import com.embabel.agent.rag.service.RetrievableIdentifier
 import com.embabel.common.ai.model.EmbeddingService
 import com.embabel.common.core.types.SimilarityResult
 import com.embabel.common.core.types.TextSimilaritySearchRequest
@@ -192,7 +193,12 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         relationshipName: String,
         direction: RelationshipDirection,
     ): List<NamedEntityData> {
-        logger.debug("Finding related entities: source={}, relationship={}, direction={}", source, relationshipName, direction)
+        logger.debug(
+            "Finding related entities: source={}, relationship={}, direction={}",
+            source,
+            relationshipName,
+            direction
+        )
         val sourceLabel = source.type
         val statement = when (direction) {
             RelationshipDirection.OUTGOING -> """
@@ -205,6 +211,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
                     properties: properties(target)
                 } AS result
             """.trimIndent()
+
             RelationshipDirection.INCOMING -> """
                 MATCH (source:$sourceLabel {id: ${'$'}entityId})<-[:$relationshipName]-(target:${properties.entityNodeName})
                 RETURN {
@@ -215,6 +222,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
                     properties: properties(target)
                 } AS result
             """.trimIndent()
+
             RelationshipDirection.BOTH -> """
                 MATCH (source:$sourceLabel {id: ${'$'}entityId})-[:$relationshipName]-(target:${properties.entityNodeName})
                 RETURN {
@@ -283,16 +291,16 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
     override fun textSearch(
         request: TextSimilaritySearchRequest,
         metadataFilter: PropertyFilter?,
-        propertyFilter: PropertyFilter?,
+        entityFilter: EntityFilter?,
     ): List<SimilarityResult<NamedEntityData>> {
         logger.info(
             "Executing text search: query='{}', topK={}, metadataFilter={}, propertyFilter={}",
-            request.query, request.topK, metadataFilter, propertyFilter
+            request.query, request.topK, metadataFilter, entityFilter
         )
         val baseStatement = resolveQuery("named_entity_fulltext_search")
         // For NamedEntityData, both metadata and properties are node properties in Neo4j
         // so we can combine them into a single Cypher filter
-        val combinedFilterResult = combineFilters(metadataFilter, propertyFilter)
+        val combinedFilterResult = combineFilters(metadataFilter, entityFilter)
         val statement = injectFilterIntoQuery(baseStatement, combinedFilterResult, "e")
 
         val params = mapOf(
@@ -316,17 +324,17 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
     override fun vectorSearch(
         request: TextSimilaritySearchRequest,
         metadataFilter: PropertyFilter?,
-        propertyFilter: PropertyFilter?,
+        entityFilter: EntityFilter?,
     ): List<SimilarityResult<NamedEntityData>> {
         val embedding = embeddingService.embed(request.query)
         logger.info(
             "Executing vector search: query='{}', topK={}, metadataFilter={}, propertyFilter={}",
-            request.query, request.topK, metadataFilter, propertyFilter
+            request.query, request.topK, metadataFilter, entityFilter
         )
         val baseStatement = resolveQuery("named_entity_vector_search")
         // For NamedEntityData, both metadata and properties are node properties in Neo4j
         // so we can combine them into a single Cypher filter
-        val combinedFilterResult = combineFilters(metadataFilter, propertyFilter)
+        val combinedFilterResult = combineFilters(metadataFilter, entityFilter)
         val statement = injectFilterIntoQuery(baseStatement, combinedFilterResult, "e")
 
         val params = mapOf(
@@ -359,6 +367,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         val combinedFilter = when {
             metadataFilter != null && propertyFilter != null ->
                 PropertyFilter.And(listOf(metadataFilter, propertyFilter))
+
             metadataFilter != null -> metadataFilter
             propertyFilter != null -> propertyFilter
             else -> null

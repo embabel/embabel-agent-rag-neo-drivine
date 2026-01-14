@@ -15,10 +15,11 @@
  */
 package com.embabel.agent.rag.neo.drivine
 
+import com.embabel.agent.rag.filter.EntityFilter
 import com.embabel.agent.rag.filter.PropertyFilter
 
 /**
- * Result of converting a [PropertyFilter] to Cypher WHERE clause components.
+ * Result of converting a [PropertyFilter] or [EntityFilter] to Cypher WHERE clause components.
  *
  * @property whereClause The Cypher WHERE clause fragment (without the WHERE keyword).
  *                       Empty string if no filter was provided.
@@ -52,12 +53,12 @@ data class CypherFilterResult(
 }
 
 /**
- * Converts [PropertyFilter] expressions to Cypher WHERE clause components.
+ * Converts [PropertyFilter] and [EntityFilter] expressions to Cypher WHERE clause components.
  *
  * Generates parameterized queries to prevent Cypher injection.
  * Parameters are prefixed with "_filter_" to avoid conflicts with other query parameters.
  *
- * ## Usage
+ * ## Property Filter Usage
  *
  * ```kotlin
  * val converter = CypherFilterConverter(nodeAlias = "e")
@@ -68,13 +69,28 @@ data class CypherFilterResult(
  * // result.parameters = mapOf("_filter_0" to "alice", "_filter_1" to 0.8)
  * ```
  *
+ * ## Entity Filter Usage
+ *
+ * Entity filters extend property filters with label-based filtering:
+ *
+ * ```kotlin
+ * val converter = CypherFilterConverter(nodeAlias = "e")
+ * val filter = EntityFilter.hasAnyLabel("Person", "Organization") and PropertyFilter.eq("status", "active")
+ * val result = converter.convert(filter)
+ *
+ * // result.whereClause = "(ANY(label IN labels(e) WHERE label IN $_filter_0)) AND (e.status = $_filter_1)"
+ * // result.parameters = mapOf("_filter_0" to listOf("Person", "Organization"), "_filter_1" to "active")
+ * ```
+ *
  * ## Kotlin DSL example
  *
  * ```kotlin
  * import com.embabel.agent.rag.filter.PropertyFilter.Companion.eq
  * import com.embabel.agent.rag.filter.PropertyFilter.Companion.gte
+ * import com.embabel.agent.rag.filter.EntityFilter.Companion.hasAnyLabel
  *
  * val filter = (eq("owner", userId) and gte("score", 0.7)) or eq("role", "admin")
+ * val entityFilter = hasAnyLabel("Person") and eq("status", "active")
  * val result = converter.convert(filter)
  * ```
  *
@@ -186,6 +202,12 @@ class CypherFilterConverter(
         is PropertyFilter.Not -> {
             val inner = convertFilter(filter.filter, params, counter)
             "NOT ($inner)"
+        }
+
+        is EntityFilter.HasAnyLabel -> {
+            val paramName = "$paramPrefix${counter.next()}"
+            params[paramName] = filter.labels.toList()
+            "ANY(label IN labels($nodeAlias) WHERE label IN \$$paramName)"
         }
     }
 }

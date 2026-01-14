@@ -15,6 +15,8 @@
  */
 package com.embabel.agent.rag.neo.drivine
 
+import com.embabel.agent.rag.filter.EntityFilter
+import com.embabel.agent.rag.filter.EntityFilter.Companion.hasAnyLabel
 import com.embabel.agent.rag.filter.PropertyFilter
 import com.embabel.agent.rag.filter.PropertyFilter.Companion.contains
 import com.embabel.agent.rag.filter.PropertyFilter.Companion.eq
@@ -363,6 +365,78 @@ class CypherFilterConverterTest {
             assertTrue(result.parameters.containsKey("_filter_1"))
             assertTrue(result.parameters.containsKey("_filter_2"))
             assertFalse(result.parameters.containsKey("_filter_3"))
+        }
+    }
+
+    @Nested
+    inner class EntityFilterTests {
+
+        @Test
+        fun `HasAnyLabel with single label converts to label check`() {
+            val result = converter.convert(hasAnyLabel("Person"))
+
+            assertEquals("ANY(label IN labels(e) WHERE label IN \$_filter_0)", result.whereClause)
+            assertEquals(mapOf("_filter_0" to listOf("Person")), result.parameters)
+        }
+
+        @Test
+        fun `HasAnyLabel with multiple labels converts to label check`() {
+            val result = converter.convert(hasAnyLabel("Person", "Organization"))
+
+            assertEquals("ANY(label IN labels(e) WHERE label IN \$_filter_0)", result.whereClause)
+            assertEquals(setOf("Person", "Organization"), (result.parameters["_filter_0"] as List<*>).toSet())
+        }
+
+        @Test
+        fun `HasAnyLabel combined with property filter using And`() {
+            val filter = hasAnyLabel("Person") and eq("status", "active")
+
+            val result = converter.convert(filter)
+
+            assertEquals(
+                "(ANY(label IN labels(e) WHERE label IN \$_filter_0)) AND (e.status = \$_filter_1)",
+                result.whereClause
+            )
+            assertEquals(listOf("Person"), result.parameters["_filter_0"])
+            assertEquals("active", result.parameters["_filter_1"])
+        }
+
+        @Test
+        fun `HasAnyLabel combined with property filter using Or`() {
+            val filter = hasAnyLabel("Admin") or eq("role", "superuser")
+
+            val result = converter.convert(filter)
+
+            assertEquals(
+                "(ANY(label IN labels(e) WHERE label IN \$_filter_0)) OR (e.role = \$_filter_1)",
+                result.whereClause
+            )
+            assertEquals(listOf("Admin"), result.parameters["_filter_0"])
+            assertEquals("superuser", result.parameters["_filter_1"])
+        }
+
+        @Test
+        fun `complex expression with HasAnyLabel and multiple property filters`() {
+            val filter = (hasAnyLabel("Person", "Organization") and eq("status", "active")) or gte("score", 0.9)
+
+            val result = converter.convert(filter)
+
+            assertEquals(
+                "((ANY(label IN labels(e) WHERE label IN \$_filter_0)) AND (e.status = \$_filter_1)) OR (e.score >= \$_filter_2)",
+                result.whereClause
+            )
+            assertEquals(setOf("Person", "Organization"), (result.parameters["_filter_0"] as List<*>).toSet())
+            assertEquals("active", result.parameters["_filter_1"])
+            assertEquals(0.9, result.parameters["_filter_2"])
+        }
+
+        @Test
+        fun `custom node alias works with HasAnyLabel`() {
+            val customConverter = CypherFilterConverter(nodeAlias = "entity")
+
+            val result = customConverter.convert(hasAnyLabel("Person"))
+
+            assertEquals("ANY(label IN labels(entity) WHERE label IN \$_filter_0)", result.whereClause)
         }
     }
 }

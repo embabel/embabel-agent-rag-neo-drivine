@@ -1,14 +1,26 @@
 package com.embabel.agent.rag.neo.drivine
 
 import com.embabel.agent.api.common.Embedding
+import com.embabel.agent.rag.filter.EntityFilter
 import com.embabel.agent.rag.filter.PropertyFilter
 import com.embabel.agent.rag.ingestion.ChunkTransformer
 import com.embabel.agent.rag.ingestion.ContentChunker
 import com.embabel.agent.rag.ingestion.RetrievableEnhancer
-import com.embabel.agent.rag.model.*
+import com.embabel.agent.rag.model.Chunk
+import com.embabel.agent.rag.model.ContentElement
+import com.embabel.agent.rag.model.ContentRoot
+import com.embabel.agent.rag.model.HierarchicalContentElement
+import com.embabel.agent.rag.model.NamedEntityData
+import com.embabel.agent.rag.model.NavigableDocument
+import com.embabel.agent.rag.model.Retrievable
 import com.embabel.agent.rag.neo.drivine.mappers.DefaultContentElementRowMapper
 import com.embabel.agent.rag.neo.drivine.model.ContentElementRepositoryInfoImpl
-import com.embabel.agent.rag.service.*
+import com.embabel.agent.rag.service.CoreSearchOperations
+import com.embabel.agent.rag.service.EntitySearch
+import com.embabel.agent.rag.service.FilteringTextSearch
+import com.embabel.agent.rag.service.FilteringVectorSearch
+import com.embabel.agent.rag.service.RagRequest
+import com.embabel.agent.rag.service.ResultExpander
 import com.embabel.agent.rag.service.support.FunctionRagFacet
 import com.embabel.agent.rag.service.support.RagFacet
 import com.embabel.agent.rag.service.support.RagFacetProvider
@@ -506,16 +518,16 @@ class DrivineStore @JvmOverloads constructor(
         request: TextSimilaritySearchRequest,
         clazz: Class<T>,
         metadataFilter: PropertyFilter?,
-        propertyFilter: PropertyFilter?,
+        entityFilter: EntityFilter?,
     ): List<SimilarityResult<T>> {
         if (clazz != Chunk::class.java) {
             throw IllegalArgumentException("DrivineStore vectorSearchWithFilter only supports Chunk class, got: $clazz")
         }
         // In Neo4j, chunk metadata is stored as node properties, so both filters can use native Cypher
-        val filterResult = combineFilters(metadataFilter, propertyFilter)
+        val filterResult = combineFilters(metadataFilter, entityFilter)
         logger.info(
             "Performing vector search with filter: query='{}', topK={}, metadataFilter={}, propertyFilter={}",
-            request.query, request.topK, metadataFilter, propertyFilter
+            request.query, request.topK, metadataFilter, entityFilter
         )
         @Suppress("UNCHECKED_CAST")
         return chunkSimilaritySearchWithFilter(
@@ -529,13 +541,13 @@ class DrivineStore @JvmOverloads constructor(
         request: TextSimilaritySearchRequest,
         clazz: Class<T>,
         metadataFilter: PropertyFilter?,
-        propertyFilter: PropertyFilter?,
+        entityFilter: EntityFilter?,
     ): List<SimilarityResult<T>> {
         // In Neo4j, chunk metadata is stored as node properties, so both filters can use native Cypher
-        val filterResult = combineFilters(metadataFilter, propertyFilter)
+        val filterResult = combineFilters(metadataFilter, entityFilter)
         logger.info(
             "Performing text search with filter: query='{}', topK={}, metadataFilter={}, propertyFilter={}",
-            request.query, request.topK, metadataFilter, propertyFilter
+            request.query, request.topK, metadataFilter, entityFilter
         )
         val results = cypherSearch.chunkFullTextSearchWithFilter(
             purpose = "Chunk full text search with filter",
@@ -558,14 +570,14 @@ class DrivineStore @JvmOverloads constructor(
      */
     private fun combineFilters(
         metadataFilter: PropertyFilter?,
-        propertyFilter: PropertyFilter?,
+        entityFilter: EntityFilter?,
     ): CypherFilterResult {
         val combinedFilter = when {
-            metadataFilter != null && propertyFilter != null ->
-                PropertyFilter.And(listOf(metadataFilter, propertyFilter))
+            metadataFilter != null && entityFilter != null ->
+                PropertyFilter.And(listOf(metadataFilter, entityFilter))
 
             metadataFilter != null -> metadataFilter
-            propertyFilter != null -> propertyFilter
+            entityFilter != null -> entityFilter
             else -> null
         }
         return chunkFilterConverter.convert(combinedFilter)
