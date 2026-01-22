@@ -309,6 +309,16 @@ class DrivineStore @JvmOverloads constructor(
         return persistenceManager.query(spec)
     }
 
+    override fun <C : ContentElement> findAll(clazz: Class<C>): Iterable<C> {
+        val label = clazz.simpleName
+        val statement = cypherContentElementQuery(" WHERE c:$label ")
+        val spec = QuerySpecification
+            .withStatement(statement)
+            .mapWith(contentElementMapper)
+            .filterIsInstance(clazz)
+        return persistenceManager.query(spec)
+    }
+
     override fun findById(id: String): ContentElement? {
         val statement = cypherContentElementQuery(" WHERE c.id = \$id ")
         val spec = QuerySpecification
