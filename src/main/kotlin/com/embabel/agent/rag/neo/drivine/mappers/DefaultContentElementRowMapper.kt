@@ -15,6 +15,7 @@ internal class DefaultContentElementRowMapper : RowMapper<ContentElement> {
      */
     private val CORE_PROPERTIES = setOf(
         "id",
+        "title",
         "text",
         "parentId",
         "uri",
@@ -46,9 +47,10 @@ internal class DefaultContentElementRowMapper : RowMapper<ContentElement> {
                 null -> Instant.now()
                 else -> Instant.now()
             }
+            val title = allProperties["title"] as? String ?: row["id"] as String
             return MaterializedDocument(
                 id = row["id"] as String,
-                title = row["id"] as String,
+                title = title,
                 children = emptyList(),
                 metadata = metadata,
                 uri = row["uri"] as String,

@@ -153,13 +153,18 @@ class DrivineStore @JvmOverloads constructor(
         logger.info("Deleting document with URI: {}", uri)
 
         try {
-            val result = cypherSearch.query(
-                "Delete document and descendants",
-                query = "delete_document_and_descendants",
-                params = mapOf("uri" to uri)
-            )
+            val cypher = """
+                MATCH (root:ContentElement {uri: ${'$'}uri})
+                WHERE 'Document' IN labels(root) OR 'ContentRoot' IN labels(root)
+                OPTIONAL MATCH (root)<-[:HAS_PARENT*0..]-(descendant:ContentElement)
+                WITH collect(DISTINCT root) + collect(DISTINCT descendant) AS nodesToDelete
+                UNWIND nodesToDelete AS node
+                WITH DISTINCT node
+                DETACH DELETE node
+                RETURN count(*) AS deletedCount
+            """.trimIndent()
 
-            val deletedCount = result.numberOrZero<Int>("deletedCount")
+            val deletedCount = cypherSearch.queryForInt(cypher, mapOf("uri" to uri))
 
             if (deletedCount == 0) {
                 logger.warn("No document found with URI: {}", uri)

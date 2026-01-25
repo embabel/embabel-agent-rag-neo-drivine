@@ -5,4 +5,5 @@ WITH collect(DISTINCT root) + collect(DISTINCT descendant) AS nodesToDelete
 UNWIND nodesToDelete AS node
 WITH DISTINCT node
 DETACH DELETE node
-RETURN count(*) AS deletedCount
+WITH count(*) AS deletedCount
+RETURN deletedCount
