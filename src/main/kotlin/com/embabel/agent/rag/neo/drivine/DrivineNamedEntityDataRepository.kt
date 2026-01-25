@@ -188,6 +188,33 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         )
     }
 
+    override fun find(label: String, filter: PropertyFilter?): List<NamedEntityData> {
+        logger.debug("Finding entities by label: {} with filter: {}", label, filter)
+        val filterResult = filterConverter.convert(filter)
+        val whereClause = filterResult.appendTo("\$label IN labels(e)")
+        val statement = namedEntityQuery(whereClause)
+        return persistenceManager.query(
+            QuerySpecification
+                .withStatement(statement)
+                .bind(mapOf("label" to label) + filterResult.parameters)
+                .mapWith(namedEntityDataMapper)
+        )
+    }
+
+    override fun find(labels: EntityFilter.HasAnyLabel, filter: PropertyFilter?): List<NamedEntityData> {
+        logger.debug("Finding entities by labels: {} with filter: {}", labels.labels, filter)
+        val labelFilterResult = filterConverter.convert(labels)
+        val propertyFilterResult = filterConverter.convert(filter)
+        val whereClause = propertyFilterResult.appendTo(labelFilterResult.whereClause)
+        val statement = namedEntityQuery(whereClause)
+        return persistenceManager.query(
+            QuerySpecification
+                .withStatement(statement)
+                .bind(labelFilterResult.parameters + propertyFilterResult.parameters)
+                .mapWith(namedEntityDataMapper)
+        )
+    }
+
     override fun findRelated(
         source: RetrievableIdentifier,
         relationshipName: String,

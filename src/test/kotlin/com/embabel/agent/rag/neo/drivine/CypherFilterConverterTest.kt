@@ -19,7 +19,12 @@ import com.embabel.agent.rag.filter.EntityFilter
 import com.embabel.agent.rag.filter.EntityFilter.Companion.hasAnyLabel
 import com.embabel.agent.rag.filter.PropertyFilter
 import com.embabel.agent.rag.filter.PropertyFilter.Companion.contains
+import com.embabel.agent.rag.filter.PropertyFilter.Companion.containsIgnoreCase
+import com.embabel.agent.rag.filter.PropertyFilter.Companion.endsWith
 import com.embabel.agent.rag.filter.PropertyFilter.Companion.eq
+import com.embabel.agent.rag.filter.PropertyFilter.Companion.eqIgnoreCase
+import com.embabel.agent.rag.filter.PropertyFilter.Companion.like
+import com.embabel.agent.rag.filter.PropertyFilter.Companion.startsWith
 import com.embabel.agent.rag.filter.PropertyFilter.Companion.gt
 import com.embabel.agent.rag.filter.PropertyFilter.Companion.gte
 import com.embabel.agent.rag.filter.PropertyFilter.Companion.lt
@@ -128,6 +133,78 @@ class CypherFilterConverterTest {
 
             assertEquals("e.description CONTAINS \$_filter_0", result.whereClause)
             assertEquals(mapOf("_filter_0" to "machine learning"), result.parameters)
+        }
+
+        @Test
+        fun `ContainsIgnoreCase converts to toLower CONTAINS`() {
+            val result = converter.convert(containsIgnoreCase("name", "Alice"))
+
+            assertEquals("toLower(e.name) CONTAINS \$_filter_0", result.whereClause)
+            assertEquals(mapOf("_filter_0" to "alice"), result.parameters)
+        }
+
+        @Test
+        fun `ContainsIgnoreCase lowercases the parameter value`() {
+            val result = converter.convert(containsIgnoreCase("name", "UPPER"))
+
+            assertEquals("toLower(e.name) CONTAINS \$_filter_0", result.whereClause)
+            assertEquals("upper", result.parameters["_filter_0"])
+        }
+
+        @Test
+        fun `EqIgnoreCase converts to toLower equality`() {
+            val result = converter.convert(eqIgnoreCase("status", "Active"))
+
+            assertEquals("toLower(e.status) = \$_filter_0", result.whereClause)
+            assertEquals(mapOf("_filter_0" to "active"), result.parameters)
+        }
+
+        @Test
+        fun `EqIgnoreCase lowercases the parameter value`() {
+            val result = converter.convert(eqIgnoreCase("status", "PENDING"))
+
+            assertEquals("toLower(e.status) = \$_filter_0", result.whereClause)
+            assertEquals("pending", result.parameters["_filter_0"])
+        }
+
+        @Test
+        fun `StartsWith converts to STARTS WITH`() {
+            val result = converter.convert(startsWith("path", "/api/"))
+
+            assertEquals("e.path STARTS WITH \$_filter_0", result.whereClause)
+            assertEquals(mapOf("_filter_0" to "/api/"), result.parameters)
+        }
+
+        @Test
+        fun `EndsWith converts to ENDS WITH`() {
+            val result = converter.convert(endsWith("filename", ".pdf"))
+
+            assertEquals("e.filename ENDS WITH \$_filter_0", result.whereClause)
+            assertEquals(mapOf("_filter_0" to ".pdf"), result.parameters)
+        }
+
+        @Test
+        fun `Like converts to regex match`() {
+            val result = converter.convert(like("code", "ERR-\\d{3}"))
+
+            assertEquals("e.code =~ \$_filter_0", result.whereClause)
+            assertEquals(mapOf("_filter_0" to "ERR-\\d{3}"), result.parameters)
+        }
+
+        @Test
+        fun `Like preserves regex pattern exactly`() {
+            val result = converter.convert(like("email", "^[a-zA-Z]+@example\\.com$"))
+
+            assertEquals("e.email =~ \$_filter_0", result.whereClause)
+            assertEquals("^[a-zA-Z]+@example\\.com$", result.parameters["_filter_0"])
+        }
+
+        @Test
+        fun `Like with case-insensitive flag`() {
+            val result = converter.convert(like("status", "(?i)^active$"))
+
+            assertEquals("e.status =~ \$_filter_0", result.whereClause)
+            assertEquals("(?i)^active$", result.parameters["_filter_0"])
         }
     }
 
@@ -437,6 +514,94 @@ class CypherFilterConverterTest {
             val result = customConverter.convert(hasAnyLabel("Person"))
 
             assertEquals("ANY(label IN labels(entity) WHERE label IN \$_filter_0)", result.whereClause)
+        }
+    }
+
+    @Nested
+    inner class StringOperatorCombinationTests {
+
+        @Test
+        fun `ContainsIgnoreCase combined with And`() {
+            val filter = containsIgnoreCase("name", "alice") and eq("status", "active")
+
+            val result = converter.convert(filter)
+
+            assertEquals(
+                "(toLower(e.name) CONTAINS \$_filter_0) AND (e.status = \$_filter_1)",
+                result.whereClause
+            )
+            assertEquals("alice", result.parameters["_filter_0"])
+            assertEquals("active", result.parameters["_filter_1"])
+        }
+
+        @Test
+        fun `StartsWith combined with EndsWith`() {
+            val filter = startsWith("path", "/api/") and endsWith("path", "/v1")
+
+            val result = converter.convert(filter)
+
+            assertEquals(
+                "(e.path STARTS WITH \$_filter_0) AND (e.path ENDS WITH \$_filter_1)",
+                result.whereClause
+            )
+            assertEquals("/api/", result.parameters["_filter_0"])
+            assertEquals("/v1", result.parameters["_filter_1"])
+        }
+
+        @Test
+        fun `Like combined with EqIgnoreCase`() {
+            val filter = like("code", "ERR-\\d+") and eqIgnoreCase("severity", "HIGH")
+
+            val result = converter.convert(filter)
+
+            assertEquals(
+                "(e.code =~ \$_filter_0) AND (toLower(e.severity) = \$_filter_1)",
+                result.whereClause
+            )
+            assertEquals("ERR-\\d+", result.parameters["_filter_0"])
+            assertEquals("high", result.parameters["_filter_1"])
+        }
+
+        @Test
+        fun `Not with ContainsIgnoreCase`() {
+            val filter = !containsIgnoreCase("name", "test")
+
+            val result = converter.convert(filter)
+
+            assertEquals("NOT (toLower(e.name) CONTAINS \$_filter_0)", result.whereClause)
+            assertEquals("test", result.parameters["_filter_0"])
+        }
+
+        @Test
+        fun `Complex filter with multiple string operators`() {
+            // (name contains "alice" OR email ends with "@example.com") AND status starts with "active"
+            val filter = (containsIgnoreCase("name", "alice") or endsWith("email", "@example.com")) and
+                startsWith("status", "active")
+
+            val result = converter.convert(filter)
+
+            assertEquals(
+                "((toLower(e.name) CONTAINS \$_filter_0) OR (e.email ENDS WITH \$_filter_1)) AND (e.status STARTS WITH \$_filter_2)",
+                result.whereClause
+            )
+            assertEquals("alice", result.parameters["_filter_0"])
+            assertEquals("@example.com", result.parameters["_filter_1"])
+            assertEquals("active", result.parameters["_filter_2"])
+        }
+
+        @Test
+        fun `HasAnyLabel with string operators`() {
+            val filter = hasAnyLabel("Person") and containsIgnoreCase("name", "smith") and startsWith("id", "USR-")
+
+            val result = converter.convert(filter)
+
+            assertEquals(
+                "((ANY(label IN labels(e) WHERE label IN \$_filter_0)) AND (toLower(e.name) CONTAINS \$_filter_1)) AND (e.id STARTS WITH \$_filter_2)",
+                result.whereClause
+            )
+            assertEquals(listOf("Person"), result.parameters["_filter_0"])
+            assertEquals("smith", result.parameters["_filter_1"])
+            assertEquals("USR-", result.parameters["_filter_2"])
         }
     }
 }
