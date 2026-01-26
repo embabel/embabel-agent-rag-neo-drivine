@@ -115,6 +115,14 @@ class CypherQueryTools @JvmOverloads constructor(
             ### Properties by Entity Type
             $propertiesSection
 
+            ## CRITICAL: Entity Resolution Rule
+            **NEVER guess or fabricate entity names or IDs from general knowledge.**
+            **ALWAYS call find_entity FIRST** to search the database for any entity mentioned by the user.
+
+            Example: User asks "how many works did biber write for violin"
+            - WRONG: Immediately query with guessed name "Heinrich Ignaz Franz Biber" or ID "biber-1644"
+            - RIGHT: First call find_entity(label="Composer", searchTerm="biber") to get the actual ID/name
+
             ## Rules
             - Only generate READ queries (MATCH, RETURN, WITH, WHERE, ORDER BY, LIMIT)
             - Never generate WRITE queries (CREATE, MERGE, SET, DELETE, REMOVE)
@@ -124,12 +132,28 @@ class CypherQueryTools @JvmOverloads constructor(
             - For value queries: use query_for_values tool, return values aliased as 'value'
             - For aggregations, GROUP BY, or tabular data: use query_for_rows tool
 
+            ## Required Query Flow
+            1. **FIRST**: Call find_entity to resolve any entity names mentioned by the user
+            2. **THEN**: Use the exact name or id returned by find_entity in your query
+            3. **NEVER** skip step 1 - even if you think you know the full name
+
+            ## Text Search Best Practices
+            - ALWAYS use toLower() for case-insensitive matching: `WHERE toLower(w.title) CONTAINS 'violin'`
+            - Search multiple text fields when looking for keywords: title, subtitle, searchTerms, name
+            - Example: `WHERE toLower(w.title) CONTAINS 'violin' OR toLower(w.searchTerms) CONTAINS 'violin'`
+
             ## Query Patterns
 
             ### Count Examples
             ```cypher
             MATCH (n:Person) RETURN count(n) AS count
             MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN count(*) AS count
+
+            // Count works by a composer containing a keyword (case-insensitive, multiple fields)
+            MATCH (c:Composer {id: 'composer-id'})-[:COMPOSED]->(w:Work)
+            WHERE toLower(w.title) CONTAINS 'violin'
+               OR toLower(w.searchTerms) CONTAINS 'violin'
+            RETURN count(w) AS count
             ```
 
             ### Entity Examples
@@ -179,6 +203,80 @@ internal class CypherToolExecutor(
 ) {
 
     private val logger = loggerFor<CypherToolExecutor>()
+
+    @LlmTool(
+        name = "find_entity",
+        description = """
+            Search for an entity by name using case-insensitive partial matching.
+            Use this FIRST when the user mentions an entity (composer, person, work, etc.) by name.
+            This resolves informal or partial names to the exact entity in the database.
+            Returns matching entities with their IDs and full names.
+
+            If multiple results are returned, choose the most relevant one for your query.
+            If no results or unsatisfactory results, try again with a shorter/different search term.
+        """
+    )
+    fun findEntity(
+        @LlmTool.Param(
+            description = "The node label to search (e.g., 'Composer', 'Work', 'Person')"
+        )
+        label: String,
+        @LlmTool.Param(
+            description = "The search term - can be partial name, case-insensitive (e.g., 'biber', 'mozart', 'beethoven')"
+        )
+        searchTerm: String,
+    ): String {
+        return try {
+            val cypher = """
+                MATCH (n:$label)
+                WHERE toLower(n.name) CONTAINS toLower('$searchTerm')
+                RETURN {
+                    id: n.id,
+                    name: n.name,
+                    labels: labels(n)
+                } AS result
+                LIMIT 10
+            """.trimIndent()
+
+            logger.info("Finding entity with label={}, searchTerm={}", label, searchTerm)
+            val compiled = CompiledCypherQuery(cypher)
+
+            @Suppress("UNCHECKED_CAST")
+            val results = persistenceManager.query(
+                QuerySpecification
+                    .withStatement(compiled.query)
+                    .transform(Map::class.java)
+            ) as List<Map<String, Any>>
+
+            logger.info("Found {} matching entities", results.size)
+
+            if (results.isEmpty()) {
+                """
+                    No $label found matching '$searchTerm'.
+                    Try again with a different or shorter search term (e.g., just the surname).
+                """.trimIndent()
+            } else if (results.size == 1) {
+                val result = results[0]
+                val id = result["id"] ?: "unknown"
+                val name = result["name"] ?: "unknown"
+                "Found exact match: $name (id: $id). Use this id or name in your query."
+            } else {
+                "Found ${results.size} matching $label(s). Choose the most relevant one:\n" +
+                    results.joinToString("\n") { result ->
+                        val id = result["id"] ?: "unknown"
+                        val name = result["name"] ?: "unknown"
+                        "- $name (id: $id)"
+                    } + "\n\nUse the chosen entity's id or exact name in your query."
+            }
+        } catch (e: Exception) {
+            val errorMessage = "Error finding entity: ${e.message}"
+            logger.error(errorMessage, e)
+            """
+                ERROR: $errorMessage
+                Please check the label name and try again with a different search term.
+            """.trimIndent()
+        }
+    }
 
     @LlmTool(
         name = "cypher_count",
