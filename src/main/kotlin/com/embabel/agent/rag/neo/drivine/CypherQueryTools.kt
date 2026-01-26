@@ -56,7 +56,10 @@ class CypherQueryTools @JvmOverloads constructor(
     private val persistenceManager: PersistenceManager,
     val llm: LlmOptions = LlmOptions(),
     private val namedEntityDataMapper: RowMapper<NamedEntityData> = NamedEntityDataRowMapper(),
-    private val validator: CypherQueryValidator = NoMutationValidator(),
+    private val validator: CypherQueryValidator = ChainedQueryValidator(
+        NoMutationValidator,
+        SchemaAdherenceValidator(strict = true),
+    ),
 ) {
 
     /**
@@ -262,11 +265,11 @@ internal class CypherToolExecutor(
                 "Found exact match: $name (id: $id). Use this id or name in your query."
             } else {
                 "Found ${results.size} matching $label(s). Choose the most relevant one:\n" +
-                    results.joinToString("\n") { result ->
-                        val id = result["id"] ?: "unknown"
-                        val name = result["name"] ?: "unknown"
-                        "- $name (id: $id)"
-                    } + "\n\nUse the chosen entity's id or exact name in your query."
+                        results.joinToString("\n") { result ->
+                            val id = result["id"] ?: "unknown"
+                            val name = result["name"] ?: "unknown"
+                            "- $name (id: $id)"
+                        } + "\n\nUse the chosen entity's id or exact name in your query."
             }
         } catch (e: Exception) {
             val errorMessage = "Error finding entity: ${e.message}"
