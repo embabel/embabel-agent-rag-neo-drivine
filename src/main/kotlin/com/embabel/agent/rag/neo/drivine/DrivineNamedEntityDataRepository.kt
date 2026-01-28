@@ -167,6 +167,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
                 type.isAnnotationPresent(GraphView::class.java)
 
     override fun <T : NamedEntity> findNativeAll(type: Class<T>): List<T>? {
+        if (!isNativeType(type)) return null
         return graphObjectManager?.loadAll(type)
     }
 
@@ -174,6 +175,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         id: String,
         type: Class<T>
     ): T? {
+        if (!isNativeType(type)) return null
         return graphObjectManager?.load(id, type)
     }
 
