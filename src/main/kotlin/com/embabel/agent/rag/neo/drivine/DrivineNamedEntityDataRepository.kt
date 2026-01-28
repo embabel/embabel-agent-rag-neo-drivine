@@ -132,6 +132,33 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         logger.debug("Created relationship: ({} {})-[:{}]->({} {})", a.type, a.id, relationship.name, b.type, b.id)
     }
 
+    override fun mergeRelationship(
+        a: RetrievableIdentifier,
+        b: RetrievableIdentifier,
+        relationship: RelationshipData
+    ) {
+        logger.debug(
+            "Merging relationship: ({} {})-[:{}]->({} {})",
+            a.type, a.id, relationship.name, b.type, b.id
+        )
+        val statement = resolveQuery("merge_named_entity_relationship")
+        val params = mapOf(
+            "fromId" to a.id,
+            "fromType" to a.type,
+            "toId" to b.id,
+            "toType" to b.type,
+            "relType" to relationship.name,
+            "relProperties" to relationship.properties,
+        )
+
+        persistenceManager.execute(
+            QuerySpecification
+                .withStatement(statement)
+                .bind(params)
+        )
+        logger.debug("Merged relationship: ({} {})-[:{}]->({} {})", a.type, a.id, relationship.name, b.type, b.id)
+    }
+
     override fun delete(id: String): Boolean {
         logger.debug("Deleting entity with id: {}", id)
         val statement = """
