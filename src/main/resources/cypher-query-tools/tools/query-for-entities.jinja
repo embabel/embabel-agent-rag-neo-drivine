@@ -1,0 +1,19 @@
+{# Tool: query_for_entities #}
+{% if section == "description" %}
+Execute a Cypher query that returns entities from the graph.
+Use this ONLY when returning a SINGLE entity type (e.g., just Works or just Composers).
+For queries involving multiple entity types or custom columns, use query_for_rows instead.
+
+CRITICAL: The returned map MUST use these EXACT key names: id, name, description, labels, properties.
+Do NOT use variations like workId, workName, composerId - this will cause errors.
+{% elif section == "param_cypher" %}
+The Cypher query to execute. MUST return a map with these EXACT keys aliased as 'result':
+- id: the entity's id (MUST be named 'id', not 'workId' or 'composerId')
+- name: the entity's name (MUST be named 'name', not 'workName' or 'title')
+- description: optional description
+- labels: labels(node)
+- properties: properties(node)
+
+CORRECT: RETURN {id: w.id, name: w.name, description: w.subtitle, labels: labels(w), properties: properties(w)} AS result
+WRONG: RETURN {workId: w.id, workName: w.name} AS result
+{% endif %}

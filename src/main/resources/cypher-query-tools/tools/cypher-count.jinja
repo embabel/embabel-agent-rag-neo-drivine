@@ -1,0 +1,19 @@
+{# Tool: cypher_count #}
+{% if section == "description" %}
+Execute a Cypher query that returns a COUNT.
+Use this ONLY when you need a simple count of matching nodes or relationships.
+
+IMPORTANT: The query MUST end with: RETURN count(...) AS count
+Do NOT use this for queries that return multiple columns or rows with data.
+For "who has the most" or "top N" questions, use query_for_rows instead.
+{% elif section == "param_cypher" %}
+The Cypher query to execute. MUST return a single count value aliased as 'count'.
+
+CORRECT examples:
+- MATCH (n:Person) RETURN count(n) AS count
+- MATCH (c:Composer)-[:COMPOSED]->(w:Work) WHERE c.id = 'mozart' RETURN count(w) AS count
+
+WRONG (do NOT do this - use query_for_rows instead):
+- MATCH ... RETURN c.name, count(w) AS count  -- multiple columns!
+- MATCH ... WITH c, count(w) AS cnt RETURN c.name, cnt  -- multiple columns!
+{% endif %}

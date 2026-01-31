@@ -1,0 +1,10 @@
+{# Tool: get_by_id #}
+{% if section == "description" %}
+Get a single entity by its exact ID.
+Use this when you already know the entity's ID and want to see its properties.
+Returns all properties of the entity.
+{% elif section == "param_label" %}
+The node label (e.g., 'Composer', 'Work', 'Ensemble')
+{% elif section == "param_id" %}
+The exact ID of the entity
+{% endif %}

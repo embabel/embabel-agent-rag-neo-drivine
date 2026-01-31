@@ -1,0 +1,13 @@
+{# Tool: query_for_rows #}
+{% if section == "description" %}
+Execute a Cypher query that returns rows of data.
+Use this for:
+- Rankings ("who has the most...", "top 10...")
+- Aggregations with grouping
+- Any query returning multiple columns or multiple results
+
+Returns each row as a map of column names to values.
+{% elif section == "param_cypher" %}
+The Cypher query to execute. Should return results as a map column named 'row'.
+Example: MATCH (c:Composer)-[:COMPOSED]->(w:Work) WITH c, count(w) AS cnt RETURN {name: c.name, count: cnt} AS row ORDER BY cnt DESC LIMIT 10
+{% endif %}

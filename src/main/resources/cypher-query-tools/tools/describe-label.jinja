@@ -1,0 +1,8 @@
+{# Tool: describe_label #}
+{% if section == "description" %}
+Describe a node label's relationships in the database.
+Use this to understand how a label connects to other entities.
+Shows outgoing and incoming relationship types with their target labels.
+{% elif section == "param_label" %}
+The node label to describe (e.g., 'Work', 'Composer', 'Ensemble')
+{% endif %}

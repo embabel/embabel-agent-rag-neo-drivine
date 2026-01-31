@@ -1,0 +1,14 @@
+{# Tool: find_entity #}
+{% if section == "description" %}
+Search for an entity by name using case-insensitive partial matching.
+Use this FIRST when the user mentions an entity (composer, person, work, etc.) by name.
+This resolves informal or partial names to the exact entity in the database.
+Returns matching entities with their IDs and full names.
+
+If multiple results are returned, choose the most relevant one for your query.
+If no results or unsatisfactory results, try again with a shorter/different search term.
+{% elif section == "param_label" %}
+The node label to search (e.g., 'Composer', 'Work', 'Person')
+{% elif section == "param_searchTerm" %}
+The search term - can be partial name, case-insensitive (e.g., 'biber', 'mozart', 'beethoven')
+{% endif %}

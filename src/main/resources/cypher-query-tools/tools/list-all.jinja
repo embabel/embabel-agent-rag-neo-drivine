@@ -1,0 +1,15 @@
+{# Tool: list_all #}
+{% if section == "description" %}
+List all entities of a given type/label.
+Use this to discover what entities exist in the database before writing queries.
+Returns IDs and names of all entities with the specified label.
+
+Example uses:
+- See all available Ensemble types (string quartet, orchestra, etc.)
+- See all Instrument types
+- See all Technique types
+{% elif section == "param_label" %}
+The node label to list (e.g., 'Ensemble', 'Instrument', 'Family', 'Technique', 'Composer')
+{% elif section == "param_limit" %}
+Maximum number of results to return (default 50)
+{% endif %}

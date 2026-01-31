@@ -1,0 +1,9 @@
+{# Tool: query_for_values #}
+{% if section == "description" %}
+Execute a Cypher query that returns literal values (strings, numbers, etc.).
+Use this when the user wants specific property values, not full entities.
+The query must return values aliased as 'value'.
+{% elif section == "param_cypher" %}
+The Cypher query to execute. Must return values aliased as 'value'.
+Example: MATCH (p:Person) RETURN p.name AS value
+{% endif %}
