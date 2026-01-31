@@ -174,8 +174,14 @@ class CypherQueryTools @JvmOverloads constructor(
               - Use for: "Who composed the most symphonies?" or "Top 10 composers by work count"
               - Query returns: `RETURN {name: x, count: y} AS row ORDER BY ...`
 
-            - **query_for_entities**: For listing/finding entities with full details
-              - Use for: "Find works by Beethoven"
+            - **query_for_entities**: For listing/finding a SINGLE entity type with full details
+              - Use for: "Find works by Beethoven", "List all symphonies"
+              - ONLY returns one entity type per query (just Works OR just Composers, not both)
+              - MUST use exact key names: id, name, description, labels, properties
+
+            - **query_for_rows**: For queries returning multiple entity types or custom data
+              - Use for: "Find works with their composers", "Show work title and composer name together"
+              - Use when you need custom column names or multiple entities in one row
 
             - **query_for_values**: For simple property lookups
               - Use for: "What is Mozart's birth year?"
@@ -209,17 +215,32 @@ class CypherQueryTools @JvmOverloads constructor(
             RETURN count(w) AS count
             ```
 
-            ### Entity Examples
+            ### Entity Examples (query_for_entities)
+            CRITICAL: The returned map MUST use these EXACT key names: id, name, description, labels, properties
+            Do NOT use variations like workId, workName, composerId, etc. - these will cause errors.
+            Only return ONE entity type per query. For multiple entity types, use query_for_rows instead.
+
+            CORRECT - single entity with exact key names:
             ```cypher
-            MATCH (e:Entity)
-            WHERE e.name CONTAINS 'search term'
+            MATCH (w:Work)
+            WHERE w.title CONTAINS 'symphony'
             RETURN {
-                id: e.id,
-                name: e.name,
-                description: e.description,
-                labels: labels(e),
-                properties: properties(e)
+                id: w.id,
+                name: w.name,
+                description: w.subtitle,
+                labels: labels(w),
+                properties: properties(w)
             } AS result
+            ```
+
+            WRONG - do NOT do this (wrong key names):
+            ```cypher
+            RETURN {workId: w.id, workName: w.name} AS result  // WRONG: use 'id' and 'name'
+            ```
+
+            WRONG - do NOT do this (multiple entity types):
+            ```cypher
+            RETURN {id: w.id, name: w.name, composerId: c.id} AS result  // WRONG: use query_for_rows
             ```
 
             ### Value Examples
@@ -604,15 +625,25 @@ internal class CypherToolExecutor(
         name = "query_for_entities",
         description = """
             Execute a Cypher query that returns entities from the graph.
-            Use this when the user wants to find or list entities (nodes) in the database.
-            The query must return entity data with id, name, description, labels, and properties.
+            Use this ONLY when returning a SINGLE entity type (e.g., just Works or just Composers).
+            For queries involving multiple entity types or custom columns, use query_for_rows instead.
+
+            CRITICAL: The returned map MUST use these EXACT key names: id, name, description, labels, properties.
+            Do NOT use variations like workId, workName, composerId - this will cause errors.
         """
     )
     fun queryForEntities(
         @LlmTool.Param(
             description = """
-                The Cypher query to execute. Must return a map with id, name, description, labels, properties aliased as 'result'.
-                Example: MATCH (e:Person) RETURN {id: e.id, name: e.name, description: e.description, labels: labels(e), properties: properties(e)} AS result
+                The Cypher query to execute. MUST return a map with these EXACT keys aliased as 'result':
+                - id: the entity's id (MUST be named 'id', not 'workId' or 'composerId')
+                - name: the entity's name (MUST be named 'name', not 'workName' or 'title')
+                - description: optional description
+                - labels: labels(node)
+                - properties: properties(node)
+
+                CORRECT: RETURN {id: w.id, name: w.name, description: w.subtitle, labels: labels(w), properties: properties(w)} AS result
+                WRONG: RETURN {workId: w.id, workName: w.name} AS result
             """
         )
         cypher: String,
