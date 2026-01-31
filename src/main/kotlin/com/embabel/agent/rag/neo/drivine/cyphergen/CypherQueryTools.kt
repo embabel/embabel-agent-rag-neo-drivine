@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.embabel.agent.rag.neo.drivine
+package com.embabel.agent.rag.neo.drivine.cyphergen
 
 import com.embabel.agent.api.tool.AgenticTool
 import com.embabel.agent.api.tool.Tool
@@ -375,11 +375,11 @@ internal class CypherToolExecutor(
                 "No $label entities found in the database."
             } else {
                 "Found ${results.size} $label entities:\n" +
-                    results.joinToString("\n") { row ->
-                        val id = row["id"] ?: "?"
-                        val name = row["name"] ?: "?"
-                        "- $name (id: $id)"
-                    }
+                        results.joinToString("\n") { row ->
+                            val id = row["id"] ?: "?"
+                            val name = row["name"] ?: "?"
+                            "- $name (id: $id)"
+                        }
             }
         } catch (e: Exception) {
             val errorMessage = "Error listing $label: ${e.message}"
@@ -412,7 +412,7 @@ internal class CypherToolExecutor(
                 val labels = row["labels"] as? List<*> ?: emptyList<String>()
 
                 "Found $label (labels: ${labels.joinToString(", ")}):\n" +
-                    props.entries.joinToString("\n") { (k, v) -> "  $k: $v" }
+                        props.entries.joinToString("\n") { (k, v) -> "  $k: $v" }
             }
         } catch (e: Exception) {
             val errorMessage = "Error getting $label by id: ${e.message}"
@@ -504,8 +504,10 @@ internal class CypherToolExecutor(
             val guidance = when {
                 errorMessage.contains("Expected exactly one result") ->
                     "Your query returns multiple rows or columns. Use query_for_rows for aggregations that return multiple results."
+
                 errorMessage.contains("Invalid input") ->
                     "Cypher syntax error. Check your query syntax and try again."
+
                 else -> "Please fix the query and try again."
             }
 
@@ -577,9 +579,9 @@ internal class CypherToolExecutor(
 
             if (results.isEmpty()) {
                 "No results found. This could mean:\n" +
-                "- No data matches your query criteria\n" +
-                "- The relationships you're querying don't exist in the database\n" +
-                "- Try a simpler query first to verify the data exists"
+                        "- No data matches your query criteria\n" +
+                        "- The relationships you're querying don't exist in the database\n" +
+                        "- Try a simpler query first to verify the data exists"
             } else {
                 "Found ${results.size} rows:\n" + results.joinToString("\n") { row ->
                     row.entries.joinToString(", ") { (k, v) -> "$k: $v" }
@@ -592,8 +594,10 @@ internal class CypherToolExecutor(
             val guidance = when {
                 errorMessage.contains("Invalid input") ->
                     "Cypher syntax error. Check your query syntax."
+
                 errorMessage.contains("not defined") || errorMessage.contains("unknown") ->
                     "Unknown label or relationship type. Check that you're using types from the schema."
+
                 else -> "Please fix the query and try again."
             }
 

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.embabel.agent.rag.neo.drivine
+package com.embabel.agent.rag.neo.drivine.cyphergen
 
 import com.embabel.agent.core.DataDictionary
 import com.embabel.common.util.loggerFor
