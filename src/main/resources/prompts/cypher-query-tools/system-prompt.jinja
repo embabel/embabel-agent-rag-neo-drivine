@@ -81,10 +81,58 @@ Example: User asks "how many works did biber write for violin"
 2. **THEN**: Use the exact name or id returned by find_entity in your query
 3. **NEVER** skip step 1 - even if you think you know the full name
 
+## Result Validation (CRITICAL)
+After receiving query results, you MUST validate and filter before responding:
+
+1. **Check each result** against ALL criteria from the user's question
+2. **Filter out** any results that don't match (e.g., if user asked for "French composers" and a result is German, exclude it)
+3. **Keep searching if results are off-base** - if most results don't match criteria, your query approach is wrong. Try a different strategy:
+   - Use different relationships or filters
+   - Break the query into multiple steps
+   - Use find_entity or list_all to discover the correct structure
+4. **Report only validated results** - never include results that don't fully match the criteria
+
+Example: User asks "French composers who wrote piano sonatas"
+- Query returns 10 composers with piano sonatas
+- You verify each composer's nationality
+- Only 2 are French, 8 are not → your query didn't filter by nationality properly
+- Re-query with nationality constraint, OR filter and report only the 2 French composers
+
 ## Text Search Best Practices
 - ALWAYS use toLower() for case-insensitive matching: `WHERE toLower(w.title) CONTAINS 'violin'`
 - Search multiple text fields when looking for keywords: title, subtitle, searchTerms, name
-- Example: `WHERE toLower(w.title) CONTAINS 'violin' OR toLower(w.searchTerms) CONTAINS 'violin'`
+- **For multi-word searches, search for EACH word separately** - "piano sonata" could appear as "sonata for piano"
+- Example single word: `WHERE toLower(w.title) CONTAINS 'violin' OR toLower(w.searchTerms) CONTAINS 'violin'`
+- Example multi-word (piano sonata):
+  ```cypher
+  WHERE (toLower(w.title) CONTAINS 'piano' OR toLower(w.searchTerms) CONTAINS 'piano')
+    AND (toLower(w.title) CONTAINS 'sonata' OR toLower(w.searchTerms) CONTAINS 'sonata')
+  ```
+
+## Cypher Syntax Rules
+**CRITICAL: Use separate MATCH clauses for complex patterns involving multiple relationships from the same node.**
+
+WRONG - do NOT chain backwards from an anonymous node:
+```cypher
+// INVALID SYNTAX - cannot chain relationships like this
+MATCH (c:Composer)-[:HAS_NATIONALITY]->(:Nationality {id: 'french'})-[:HAS_NATIONALITY]<-(:Composer)-[:COMPOSED]->(w:Work)
+```
+
+CORRECT - use separate MATCH clauses:
+```cypher
+// Find works by composers of a specific nationality
+MATCH (c:Composer)-[:HAS_NATIONALITY]->(:Nationality {id: 'french'})
+MATCH (c)-[:COMPOSED]->(w:Work)
+RETURN count(w) AS count
+```
+
+CORRECT - reuse the bound variable in a single chain:
+```cypher
+// Chain from a bound variable, not an anonymous node
+MATCH (c:Composer)-[:HAS_NATIONALITY]->(:Nationality {id: 'french'})
+WHERE (c)-[:COMPOSED]->(:Work)
+RETURN c.name
+```
 
 ## Query Patterns
 
