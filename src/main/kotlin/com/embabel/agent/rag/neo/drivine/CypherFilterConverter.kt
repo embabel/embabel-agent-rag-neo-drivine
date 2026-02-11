@@ -181,6 +181,36 @@ class CypherFilterConverter(
             "$nodeAlias.${filter.key} CONTAINS \$$paramName"
         }
 
+        is PropertyFilter.ContainsIgnoreCase -> {
+            val paramName = "$paramPrefix${counter.next()}"
+            params[paramName] = filter.value.lowercase()
+            "toLower($nodeAlias.${filter.key}) CONTAINS \$$paramName"
+        }
+
+        is PropertyFilter.EqIgnoreCase -> {
+            val paramName = "$paramPrefix${counter.next()}"
+            params[paramName] = filter.value.lowercase()
+            "toLower($nodeAlias.${filter.key}) = \$$paramName"
+        }
+
+        is PropertyFilter.StartsWith -> {
+            val paramName = "$paramPrefix${counter.next()}"
+            params[paramName] = filter.value
+            "$nodeAlias.${filter.key} STARTS WITH \$$paramName"
+        }
+
+        is PropertyFilter.EndsWith -> {
+            val paramName = "$paramPrefix${counter.next()}"
+            params[paramName] = filter.value
+            "$nodeAlias.${filter.key} ENDS WITH \$$paramName"
+        }
+
+        is PropertyFilter.Like -> {
+            val paramName = "$paramPrefix${counter.next()}"
+            params[paramName] = filter.pattern
+            "$nodeAlias.${filter.key} =~ \$$paramName"
+        }
+
         is PropertyFilter.And -> {
             val clauses = filter.filters.map { convertFilter(it, params, counter) }
             if (clauses.size == 1) {
