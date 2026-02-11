@@ -35,10 +35,10 @@ embabel:
         uri: ${NEO4J_URI:bolt://localhost:7687}
         username: ${NEO4J_USERNAME:neo4j}
         password: ${NEO4J_PASSWORD:brahmsian}
-        content-element-index: embabel-content-index
-        entity-index: embabel-entity-index
-        content-element-full-text-index: embabel-content-fulltext-index
-        entity-full-text-index: embabel-entity-fulltext-index
+        content-element-index: embabel_content_index
+        entity-index: embabel_entity_index
+        content-element-full-text-index: embabel_content_fulltext_index
+        entity-full-text-index: embabel_entity_fulltext_index
         chunk-node-name: Chunk
         entity-node-name: Entity
         max-chunk-size: 1500
