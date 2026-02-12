@@ -70,7 +70,8 @@ import org.drivine.query.QuerySpecification
  * @param verifyIndexes If true (default), verifies required indexes exist at construction time
  *        and logs a warning if they are missing
  */
-class DrivineNamedEntityDataRepository @JvmOverloads constructor(
+@ConsistentCopyVisibility
+data class DrivineNamedEntityDataRepository @JvmOverloads constructor(
     private val persistenceManager: PersistenceManager,
     private val properties: NeoRagServiceProperties,
     override val dataDictionary: DataDictionary,
@@ -80,17 +81,68 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
     private val queryResolver: LogicalQueryResolver = FixedLocationLogicalQueryResolver(),
     private val namedEntityDataMapper: RowMapper<NamedEntityData> = NamedEntityDataRowMapper(),
     private val namedEntityDataSimilarityMapper: RowMapper<SimilarityResult<NamedEntityData>> = NamedEntityDataSimilarityMapper(),
-    private val filterConverter: CypherFilterConverter = CypherFilterConverter(nodeAlias = "e"),
-    verifyIndexes: Boolean = true,
+    private val filterConverter: CypherFilterConverter = CypherFilterConverter(nodeAlias = "n"),
+    private val verifyIndexes: Boolean = true,
+    /**
+     * Optional Cypher WHERE clause to narrow all queries.
+     * Use 'n' as the node alias. Set via [narrowedBy] or [scopedToContext].
+     */
+    private val narrowingClause: String? = null,
 ) : NamedEntityDataRepository {
 
     private val logger = loggerFor<DrivineNamedEntityDataRepository>()
 
     init {
-        if (verifyIndexes) {
+        if (verifyIndexes && narrowingClause == null) {
+            // Only verify indexes for the root repository, not narrowed copies
             verifyRequiredIndexes()
         }
     }
+
+    /**
+     * Create a narrowed view of this repository that adds an extra Cypher constraint to all queries.
+     *
+     * The constraint is injected into WHERE clauses of vector search, text search, and label queries.
+     * Use the node alias 'n' to refer to the entity node.
+     *
+     * Example:
+     * ```kotlin
+     * // Only entities created after a certain date
+     * val recent = repo.narrowedBy("n.createdAt > datetime('2024-01-01')")
+     *
+     * // Only entities with a specific property
+     * val active = repo.narrowedBy("n.status = 'active'")
+     * ```
+     *
+     * @param cypherConstraint A literal Cypher expression to add to WHERE clauses (use 'n' for entity node)
+     * @return A narrowed repository that applies the constraint to all queries
+     */
+    fun narrowedBy(cypherConstraint: String): DrivineNamedEntityDataRepository = copy(
+        narrowingClause = if (this.narrowingClause != null) {
+            "(${this.narrowingClause}) AND ($cypherConstraint)"
+        } else {
+            cypherConstraint
+        },
+        verifyIndexes = false,
+    )
+
+    /**
+     * Create a context-scoped view of this repository.
+     *
+     * Only returns entities that are mentioned in propositions belonging to the specified context.
+     * Uses the relationship pattern: Entity <-[:RESOLVED_TO]- Mention <-[:HAS_MENTION]- Proposition
+     *
+     * Example:
+     * ```kotlin
+     * val userScoped = repo.inContext(user.contextId)
+     * val contacts = userScoped.findByLabel("Contact") // Only contacts mentioned by this user
+     * ```
+     *
+     * @param contextId The context ID to scope queries to
+     * @return A narrowed repository that only returns entities mentioned in the context
+     */
+    infix fun scopedToContext(contextId: String): DrivineNamedEntityDataRepository =
+        narrowedBy("EXISTS { (n)<-[:RESOLVED_TO]-(:Mention)<-[:HAS_MENTION]-(:Proposition {contextId: '$contextId'}) }")
 
     private fun verifyRequiredIndexes() {
         val requiredIndexes = listOf(properties.entityIndex, properties.entityFullTextIndex)
@@ -195,7 +247,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
 
     override fun findById(id: String): NamedEntityData? {
         logger.debug("Finding entity by id: {}", id)
-        val statement = namedEntityQuery("e.id = \$id")
+        val statement = namedEntityQuery("n.id = \$id")
         return persistenceManager.maybeGetOne(
             QuerySpecification
                 .withStatement(statement)
@@ -223,7 +275,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
 
     override fun findByLabel(label: String): List<NamedEntityData> {
         logger.debug("Finding entities by label: {}", label)
-        val statement = namedEntityQuery("\$label IN labels(e)")
+        val statement = namedEntityQuery("\$label IN labels(n)")
         return persistenceManager.query(
             QuerySpecification
                 .withStatement(statement)
@@ -235,7 +287,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
     override fun find(label: String, filter: PropertyFilter?): List<NamedEntityData> {
         logger.debug("Finding entities by label: {} with filter: {}", label, filter)
         val filterResult = filterConverter.convert(filter)
-        val whereClause = filterResult.appendTo("\$label IN labels(e)")
+        val whereClause = filterResult.appendTo("\$label IN labels(n)")
         val statement = namedEntityQuery(whereClause)
         return persistenceManager.query(
             QuerySpecification
@@ -375,7 +427,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         // For NamedEntityData, both metadata and properties are node properties in Neo4j
         // so we can combine them into a single Cypher filter
         val combinedFilterResult = combineFilters(metadataFilter, entityFilter)
-        val statement = injectFilterIntoQuery(baseStatement, combinedFilterResult, "e")
+        val statement = injectFilterIntoQuery(baseStatement, combinedFilterResult, "n")
 
         val params = mapOf(
             "fulltextIndex" to properties.entityFullTextIndex,
@@ -409,7 +461,7 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         // For NamedEntityData, both metadata and properties are node properties in Neo4j
         // so we can combine them into a single Cypher filter
         val combinedFilterResult = combineFilters(metadataFilter, entityFilter)
-        val statement = injectFilterIntoQuery(baseStatement, combinedFilterResult, "e")
+        val statement = injectFilterIntoQuery(baseStatement, combinedFilterResult, "n")
 
         val params = mapOf(
             "vectorIndex" to properties.entityIndex,
@@ -449,18 +501,30 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         return filterConverter.convert(combinedFilter)
     }
 
-    private fun namedEntityQuery(whereClause: String): String =
-        """
-        MATCH (e:${properties.entityNodeName})
-        WHERE $whereClause
+    private fun namedEntityQuery(whereClause: String): String {
+        val fullWhereClause = applyNarrowing(whereClause)
+        return """
+        MATCH (n:${properties.entityNodeName})
+        WHERE $fullWhereClause
         RETURN {
-            id: e.id,
-            name: COALESCE(e.name, ''),
-            description: COALESCE(e.description, ''),
-            labels: labels(e),
-            properties: properties(e)
+            id: n.id,
+            name: COALESCE(n.name, ''),
+            description: COALESCE(n.description, ''),
+            labels: labels(n),
+            properties: properties(n)
         } AS result
         """.trimIndent()
+    }
+
+    /**
+     * Applies the narrowing clause to an existing WHERE clause.
+     */
+    private fun applyNarrowing(whereClause: String): String =
+        if (narrowingClause != null) {
+            "($whereClause) AND ($narrowingClause)"
+        } else {
+            whereClause
+        }
 
     private fun resolveQuery(name: String): String =
         queryResolver.resolve(name) ?: error("Could not resolve query: $name")
