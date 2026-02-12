@@ -16,8 +16,8 @@
 package com.embabel.agent.rag.neo.drivine
 
 import com.embabel.agent.core.DataDictionary
+import com.embabel.agent.filter.PropertyFilter
 import com.embabel.agent.rag.filter.EntityFilter
-import com.embabel.agent.rag.filter.PropertyFilter
 import com.embabel.agent.rag.model.NamedEntity
 import com.embabel.agent.rag.model.NamedEntityData
 import com.embabel.agent.rag.model.RelationshipDirection
@@ -245,7 +245,10 @@ class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         )
     }
 
-    override fun find(labels: EntityFilter.HasAnyLabel, filter: PropertyFilter?): List<NamedEntityData> {
+    override fun find(
+        labels: EntityFilter.HasAnyLabel,
+        filter: PropertyFilter?
+    ): List<NamedEntityData> {
         logger.debug("Finding entities by labels: {} with filter: {}", labels.labels, filter)
         val labelFilterResult = filterConverter.convert(labels)
         val propertyFilterResult = filterConverter.convert(filter)

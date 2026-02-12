@@ -15,22 +15,21 @@
  */
 package com.embabel.agent.rag.neo.drivine
 
-import com.embabel.agent.rag.filter.EntityFilter
+import com.embabel.agent.filter.PropertyFilter
+import com.embabel.agent.filter.PropertyFilter.Companion.contains
+import com.embabel.agent.filter.PropertyFilter.Companion.containsIgnoreCase
+import com.embabel.agent.filter.PropertyFilter.Companion.endsWith
+import com.embabel.agent.filter.PropertyFilter.Companion.eq
+import com.embabel.agent.filter.PropertyFilter.Companion.eqIgnoreCase
+import com.embabel.agent.filter.PropertyFilter.Companion.gt
+import com.embabel.agent.filter.PropertyFilter.Companion.gte
+import com.embabel.agent.filter.PropertyFilter.Companion.like
+import com.embabel.agent.filter.PropertyFilter.Companion.lt
+import com.embabel.agent.filter.PropertyFilter.Companion.lte
+import com.embabel.agent.filter.PropertyFilter.Companion.ne
+import com.embabel.agent.filter.PropertyFilter.Companion.nin
+import com.embabel.agent.filter.PropertyFilter.Companion.startsWith
 import com.embabel.agent.rag.filter.EntityFilter.Companion.hasAnyLabel
-import com.embabel.agent.rag.filter.PropertyFilter
-import com.embabel.agent.rag.filter.PropertyFilter.Companion.contains
-import com.embabel.agent.rag.filter.PropertyFilter.Companion.containsIgnoreCase
-import com.embabel.agent.rag.filter.PropertyFilter.Companion.endsWith
-import com.embabel.agent.rag.filter.PropertyFilter.Companion.eq
-import com.embabel.agent.rag.filter.PropertyFilter.Companion.eqIgnoreCase
-import com.embabel.agent.rag.filter.PropertyFilter.Companion.like
-import com.embabel.agent.rag.filter.PropertyFilter.Companion.startsWith
-import com.embabel.agent.rag.filter.PropertyFilter.Companion.gt
-import com.embabel.agent.rag.filter.PropertyFilter.Companion.gte
-import com.embabel.agent.rag.filter.PropertyFilter.Companion.lt
-import com.embabel.agent.rag.filter.PropertyFilter.Companion.lte
-import com.embabel.agent.rag.filter.PropertyFilter.Companion.ne
-import com.embabel.agent.rag.filter.PropertyFilter.Companion.nin
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -576,7 +575,7 @@ class CypherFilterConverterTest {
         fun `Complex filter with multiple string operators`() {
             // (name contains "alice" OR email ends with "@example.com") AND status starts with "active"
             val filter = (containsIgnoreCase("name", "alice") or endsWith("email", "@example.com")) and
-                startsWith("status", "active")
+                    startsWith("status", "active")
 
             val result = converter.convert(filter)
 

@@ -16,8 +16,8 @@
 package com.embabel.agent.rag.neo.drivine
 
 import com.embabel.agent.api.common.Embedding
+import com.embabel.agent.filter.PropertyFilter
 import com.embabel.agent.rag.filter.EntityFilter
-import com.embabel.agent.rag.filter.PropertyFilter
 import com.embabel.agent.rag.ingestion.ChunkTransformer
 import com.embabel.agent.rag.ingestion.ContentChunker
 import com.embabel.agent.rag.ingestion.RetrievableEnhancer

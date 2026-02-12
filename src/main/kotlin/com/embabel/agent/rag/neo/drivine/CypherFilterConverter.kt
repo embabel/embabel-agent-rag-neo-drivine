@@ -15,8 +15,9 @@
  */
 package com.embabel.agent.rag.neo.drivine
 
+import com.embabel.agent.filter.ObjectFilter
+import com.embabel.agent.filter.PropertyFilter
 import com.embabel.agent.rag.filter.EntityFilter
-import com.embabel.agent.rag.filter.PropertyFilter
 
 /**
  * Result of converting a [PropertyFilter] or [EntityFilter] to Cypher WHERE clause components.
@@ -238,6 +239,12 @@ class CypherFilterConverter(
             val paramName = "$paramPrefix${counter.next()}"
             params[paramName] = filter.labels.toList()
             "ANY(label IN labels($nodeAlias) WHERE label IN \$$paramName)"
+        }
+
+        is ObjectFilter -> {
+            // ObjectFilter is a marker interface, not directly convertible to Cypher.
+            // It should be handled at a higher level where the actual filter type is known.
+            throw IllegalArgumentException("Cannot convert ObjectFilter directly to Cypher. Handle specific filter types instead.")
         }
     }
 }
