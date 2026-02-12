@@ -41,7 +41,7 @@ const val DEFAULT_CYPHER_LOCATION = "classpath:cypher"
 
 data class FixedLocationLogicalQueryResolver(
     val location: String = DEFAULT_CYPHER_LOCATION,
-    private val resourceLoader: ResourceLoader = DefaultResourceLoader(),
+    private val resourceLoader: ResourceLoader = DefaultResourceLoader(Thread.currentThread().contextClassLoader),
 ) : LogicalQueryResolver {
     override val description: String = "Load from fixed location $location, expecting .cypher suffix"
 
