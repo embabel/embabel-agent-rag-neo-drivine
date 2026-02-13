@@ -339,6 +339,19 @@ class DrivineStore @JvmOverloads constructor(
         return persistenceManager.query(spec)
     }
 
+    override fun <C : ContentElement> count(clazz: Class<C>, filter: PropertyFilter?): Int {
+        val label = clazz.simpleName
+        val filterConverter = CypherFilterConverter(nodeAlias = "c")
+        val filterResult = filterConverter.convert(filter)
+        val whereClause = if (filterResult.isEmpty()) {
+            " WHERE c:$label "
+        } else {
+            " WHERE c:$label AND ${filterResult.whereClause} "
+        }
+        val statement = "MATCH (c:ContentElement) $whereClause RETURN count(c) AS count"
+        return cypherSearch.queryForInt(statement, filterResult.parameters)
+    }
+
     override fun findById(id: String): ContentElement? {
         val statement = cypherContentElementQuery(" WHERE c.id = \$id ")
         val spec = QuerySpecification
