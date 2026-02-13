@@ -70,7 +70,6 @@ import org.drivine.query.QuerySpecification
  * @param verifyIndexes If true (default), verifies required indexes exist at construction time
  *        and logs a warning if they are missing
  */
-@ConsistentCopyVisibility
 data class DrivineNamedEntityDataRepository @JvmOverloads constructor(
     private val persistenceManager: PersistenceManager,
     private val properties: NeoRagServiceProperties,
@@ -141,7 +140,7 @@ data class DrivineNamedEntityDataRepository @JvmOverloads constructor(
      * @param contextId The context ID to scope queries to
      * @return A narrowed repository that only returns entities mentioned in the context
      */
-    infix fun scopedToContext(contextId: String): DrivineNamedEntityDataRepository =
+    override fun withContextScope(contextId: String): DrivineNamedEntityDataRepository =
         narrowedBy("EXISTS { (n)<-[:RESOLVED_TO]-(:Mention)<-[:HAS_MENTION]-(:Proposition {contextId: '$contextId'}) }")
 
     private fun verifyRequiredIndexes() {
