@@ -16,7 +16,9 @@
 package com.embabel.agent.rag.neo.drivine
 
 import com.embabel.agent.rag.model.Chunk
+import com.embabel.agent.rag.model.LeafSection
 import com.embabel.agent.rag.neo.drivine.test.TestAppContext
+import com.embabel.agent.rag.service.ResultExpander
 import com.embabel.common.ai.model.ModelProvider
 import org.drivine.manager.PersistenceManager
 import org.drivine.query.QuerySpecification
@@ -24,6 +26,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -145,6 +148,172 @@ class DrivineStoreTest {
         val result = drivineStore.findContentRootByUri(uri)
 
         assertNull(result, "Chunk nodes should not be returned as ContentRoot")
+    }
+
+    @Nested
+    inner class ExpandResult {
+
+        @Test
+        fun `sequence expansion should return adjacent chunks`() {
+            val parentId = UUID.randomUUID().toString()
+            val sectionId = "section-${UUID.randomUUID()}"
+
+            val chunks = (0..2).map { seq ->
+                val chunkId = UUID.randomUUID().toString()
+                testNodeIds.add(chunkId)
+                Chunk(
+                    id = chunkId,
+                    text = "Chunk content $seq",
+                    parentId = parentId,
+                    metadata = mapOf(
+                        "container_section_id" to sectionId,
+                        "sequence_number" to seq
+                    )
+                )
+            }
+            chunks.forEach { drivineStore.save(it) }
+
+            val result = drivineStore.expandResult(
+                chunks[1].id,
+                ResultExpander.Method.SEQUENCE,
+                elementsToAdd = 1
+            )
+
+            assertEquals(3, result.size)
+            assertEquals(chunks.map { it.id }, result.map { it.id })
+        }
+
+        @Test
+        fun `sequence expansion should return only original chunk when metadata missing`() {
+            val chunkId = UUID.randomUUID().toString()
+            testNodeIds.add(chunkId)
+            val chunk = Chunk(
+                id = chunkId,
+                text = "Chunk without sequence metadata",
+                parentId = "parent",
+                metadata = emptyMap()
+            )
+            drivineStore.save(chunk)
+
+            val result = drivineStore.expandResult(
+                chunkId,
+                ResultExpander.Method.SEQUENCE,
+                elementsToAdd = 1
+            )
+
+            assertEquals(1, result.size)
+            assertEquals(chunkId, result.first().id)
+        }
+
+        @Test
+        fun `sequence expansion should return empty list for non-existent chunk`() {
+            val result = drivineStore.expandResult(
+                "non-existent-${UUID.randomUUID()}",
+                ResultExpander.Method.SEQUENCE,
+                elementsToAdd = 1
+            )
+
+            assertTrue(result.isEmpty())
+        }
+
+        @Test
+        fun `sequence expansion should not cross container sections`() {
+            val parentId = UUID.randomUUID().toString()
+            val section1 = "section1-${UUID.randomUUID()}"
+            val section2 = "section2-${UUID.randomUUID()}"
+
+            val s1Chunks = (0..1).map { seq ->
+                val chunkId = UUID.randomUUID().toString()
+                testNodeIds.add(chunkId)
+                Chunk(
+                    id = chunkId,
+                    text = "S1 chunk $seq",
+                    parentId = parentId,
+                    metadata = mapOf(
+                        "container_section_id" to section1,
+                        "sequence_number" to seq
+                    )
+                )
+            }
+            val s2Chunk = Chunk(
+                id = UUID.randomUUID().toString().also { testNodeIds.add(it) },
+                text = "S2 chunk 0",
+                parentId = parentId,
+                metadata = mapOf(
+                    "container_section_id" to section2,
+                    "sequence_number" to 0
+                )
+            )
+            (s1Chunks + s2Chunk).forEach { drivineStore.save(it) }
+
+            val result = drivineStore.expandResult(
+                s1Chunks[0].id,
+                ResultExpander.Method.SEQUENCE,
+                elementsToAdd = 5
+            )
+
+            assertEquals(2, result.size)
+            assertTrue(result.all { it.id in s1Chunks.map { c -> c.id } })
+        }
+
+        @Test
+        fun `zoomOut should return parent element`() {
+            val parentId = UUID.randomUUID().toString()
+            testNodeIds.add(parentId)
+            val leafSection = LeafSection(
+                id = parentId,
+                title = "Parent Section",
+                text = "Parent section content",
+                parentId = "root-id",
+            )
+            drivineStore.save(leafSection)
+
+            val chunkId = UUID.randomUUID().toString()
+            testNodeIds.add(chunkId)
+            val chunk = Chunk(
+                id = chunkId,
+                text = "Test chunk content for zoom out",
+                parentId = parentId,
+                metadata = mapOf(
+                    "container_section_id" to parentId,
+                    "sequence_number" to 0
+                )
+            )
+            drivineStore.save(chunk)
+
+            val result = drivineStore.expandResult(
+                chunkId,
+                ResultExpander.Method.ZOOM_OUT,
+                elementsToAdd = 1
+            )
+
+            assertEquals(1, result.size)
+            val parent = result.first()
+            assertEquals(parentId, parent.id)
+            assertTrue(parent is LeafSection)
+            assertEquals("Parent Section", (parent as LeafSection).title)
+        }
+
+        @Test
+        fun `zoomOut should return empty list when parent not found`() {
+            val chunkId = UUID.randomUUID().toString()
+            testNodeIds.add(chunkId)
+            val chunk = Chunk(
+                id = chunkId,
+                text = "Orphan chunk",
+                parentId = "non-existent-parent-${UUID.randomUUID()}",
+                metadata = emptyMap()
+            )
+            drivineStore.save(chunk)
+
+            val result = drivineStore.expandResult(
+                chunkId,
+                ResultExpander.Method.ZOOM_OUT,
+                elementsToAdd = 1
+            )
+
+            assertTrue(result.isEmpty())
+        }
     }
 
     @Nested

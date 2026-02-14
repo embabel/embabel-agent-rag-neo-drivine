@@ -20,6 +20,8 @@ import com.embabel.agent.filter.PropertyFilter
 import com.embabel.agent.rag.filter.EntityFilter
 import com.embabel.agent.rag.ingestion.ChunkTransformer
 import com.embabel.agent.rag.ingestion.ContentChunker
+import com.embabel.agent.rag.ingestion.ContentChunker.Companion.CONTAINER_SECTION_ID
+import com.embabel.agent.rag.ingestion.ContentChunker.Companion.SEQUENCE_NUMBER
 import com.embabel.agent.rag.ingestion.RetrievableEnhancer
 import com.embabel.agent.rag.model.Chunk
 import com.embabel.agent.rag.model.ContentElement
@@ -67,6 +69,7 @@ class DrivineStore @JvmOverloads constructor(
     override val enhancers: List<RetrievableEnhancer> = emptyList(),
     private val contentElementMapper: RowMapper<ContentElement> = DefaultContentElementRowMapper(),
     private val chunkFilterConverter: CypherFilterConverter = CypherFilterConverter(nodeAlias = "chunk"),
+    private val queryResolver: LogicalQueryResolver = FixedLocationLogicalQueryResolver(),
 ) : AbstractChunkingContentElementRepository(
     chunkerConfig = chunkerConfig,
     chunkTransformer = chunkTransformer,
@@ -288,7 +291,76 @@ class DrivineStore @JvmOverloads constructor(
         method: ResultExpander.Method,
         elementsToAdd: Int
     ): List<ContentElement> {
-        TODO("Not yet implemented")
+        return when (method) {
+            ResultExpander.Method.SEQUENCE -> expandBySequence(id, elementsToAdd)
+            ResultExpander.Method.ZOOM_OUT -> expandByZoomOut(id)
+        }
+    }
+
+    private fun expandBySequence(id: String, elementsToAdd: Int): List<ContentElement> {
+        val contentElement = findById(id)
+        if (contentElement == null) {
+            logger.warn("Content element with id='{}' not found for expansion", id)
+            return emptyList()
+        }
+        if (contentElement !is Chunk) {
+            logger.warn("Content element id='{}' is not a Chunk; cannot expand by sequence", id)
+            return emptyList()
+        }
+
+        val containerSectionId = contentElement.metadata[CONTAINER_SECTION_ID]?.toString()
+        val sequenceNumber = contentElement.metadata[SEQUENCE_NUMBER]?.toString()?.toLongOrNull()
+
+        if (containerSectionId == null || sequenceNumber == null) {
+            logger.warn(
+                "Chunk id='{}' missing required metadata for sequence expansion: containerSectionId={}, sequenceNumber={}",
+                id, containerSectionId, sequenceNumber
+            )
+            return listOf(contentElement)
+        }
+
+        val minSeq = sequenceNumber - elementsToAdd
+        val maxSeq = sequenceNumber + elementsToAdd
+
+        val statement = queryResolver.resolve("expand_by_sequence")
+            ?: error("Could not load expand_by_sequence.cypher")
+
+        val spec = QuerySpecification
+            .withStatement(statement)
+            .bind(
+                mapOf(
+                    "containerSectionId" to containerSectionId,
+                    "minSeq" to minSeq,
+                    "maxSeq" to maxSeq,
+                )
+            )
+            .mapWith(contentElementMapper)
+
+        val results = persistenceManager.query(spec)
+        logger.info(
+            "Expanded chunk id='{}' (seq={}) to {} chunks in section '{}'",
+            id, sequenceNumber, results.size, containerSectionId
+        )
+        return results
+    }
+
+    private fun expandByZoomOut(id: String): List<ContentElement> {
+        val statement = queryResolver.resolve("expand_zoom_out")
+            ?: error("Could not load expand_zoom_out.cypher")
+
+        val spec = QuerySpecification
+            .withStatement(statement)
+            .bind(mapOf("id" to id))
+            .mapWith(contentElementMapper)
+
+        val results = persistenceManager.query(spec)
+        if (results.isNotEmpty()) {
+            val parent = results.first()
+            logger.info("Zoomed out from id='{}' to parent id='{}' ({})", id, parent.id, parent.labels())
+        } else {
+            logger.warn("Zoom out found no parent for content element id='{}'", id)
+        }
+        return results
     }
 
     override fun info(): ContentElementRepositoryInfo {

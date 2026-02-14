@@ -17,6 +17,7 @@ package com.embabel.agent.rag.neo.drivine.mappers
 
 import com.embabel.agent.rag.model.Chunk
 import com.embabel.agent.rag.model.ContentElement
+import com.embabel.agent.rag.model.LeafSection
 import com.embabel.agent.rag.model.MaterializedDocument
 import org.drivine.mapper.RowMapper
 import java.time.Instant
@@ -51,6 +52,15 @@ internal class DefaultContentElementRowMapper : RowMapper<ContentElement> {
                 id = row["id"] as String,
                 text = row["text"] as String,
                 parentId = row["parentId"] as String,
+                metadata = metadata,
+            )
+        if (labels.contains("LeafSection"))
+            return LeafSection(
+                id = row["id"] as String,
+                title = allProperties["title"] as? String ?: "",
+                text = row["text"] as? String ?: "",
+                parentId = row["parentId"] as? String,
+                uri = row["uri"] as? String,
                 metadata = metadata,
             )
         if (labels.contains("Document") || labels.contains("ContentRoot")) {
