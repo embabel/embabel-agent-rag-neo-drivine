@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.embabel.build</groupId>
         <artifactId>embabel-build-parent</artifactId>
-        <version>0.1.10-SNAPSHOT</version>
+        <version>0.1.12-SNAPSHOT</version>
     </parent>
 
     <groupId>com.embabel.agent</groupId>
@@ -17,7 +17,7 @@
     <description>Neo4j RAG implementation using Drivine for Embabel Agent</description>
 
     <properties>
-        <embabel-agent.version>0.3.4-SNAPSHOT</embabel-agent.version>
+        <embabel-agent.version>0.3.5-SNAPSHOT</embabel-agent.version>
         <drivine.version>0.0.14</drivine.version>
     </properties>
 
