@@ -129,7 +129,7 @@ data class DrivineNamedEntityDataRepository @JvmOverloads constructor(
      * Create a context-scoped view of this repository.
      *
      * Only returns entities that are mentioned in propositions belonging to the specified context.
-     * Uses the relationship pattern: Entity <-[:RESOLVED_TO]- Mention <-[:HAS_MENTION]- Proposition
+     * Uses the relationship pattern: Entity <-[:MENTIONS]- Proposition
      *
      * Example:
      * ```kotlin
@@ -141,7 +141,7 @@ data class DrivineNamedEntityDataRepository @JvmOverloads constructor(
      * @return A narrowed repository that only returns entities mentioned in the context
      */
     override fun withContextScope(contextId: String): DrivineNamedEntityDataRepository =
-        narrowedBy("EXISTS { (n)<-[:RESOLVED_TO]-(:Mention)<-[:HAS_MENTION]-(:Proposition {contextId: '$contextId'}) }")
+        narrowedBy("EXISTS { (n)<-[:MENTIONS]-(:Proposition {contextId: '$contextId'}) }")
 
     private fun verifyRequiredIndexes() {
         val requiredIndexes = listOf(properties.entityIndex, properties.entityFullTextIndex)
@@ -381,6 +381,7 @@ data class DrivineNamedEntityDataRepository @JvmOverloads constructor(
                 ?.labels ?: setOf(label)
         }.toSet()
         val labels = (expandedLabels + properties.entityNodeName).distinct()
+        logger.debug("Saved entity '{}' with labels: {} (expanded from {})", entity.name, labels, entity.labels())
         // MERGE only on base entity label + id to avoid creating duplicates when labels change.
         // Then SET additional labels separately.
         val additionalLabels = labels.filter { it != properties.entityNodeName }
