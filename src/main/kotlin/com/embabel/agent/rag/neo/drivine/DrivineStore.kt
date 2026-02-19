@@ -53,7 +53,6 @@ import com.embabel.common.core.types.TextSimilaritySearchRequest
 import org.drivine.manager.PersistenceManager
 import org.drivine.mapper.RowMapper
 import org.drivine.query.QuerySpecification
-import org.springframework.ai.embedding.EmbeddingModel
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.support.TransactionTemplate
@@ -836,12 +835,11 @@ class DrivineStore @JvmOverloads constructor(
         name: String,
         on: String,
     ) {
-        val embeddingModel = embeddingService!!.model as EmbeddingModel // TODO: Fixme
         val statement = """
             CREATE VECTOR INDEX `$name` IF NOT EXISTS
             FOR (n:$on) ON (n.embedding)
             OPTIONS {indexConfig: {
-            `vector.dimensions`: ${embeddingModel.dimensions()},
+            `vector.dimensions`: ${embeddingService!!.dimensions},
             `vector.similarity_function`: 'cosine'
             }}"""
 

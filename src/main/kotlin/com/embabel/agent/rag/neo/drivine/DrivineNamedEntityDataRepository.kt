@@ -375,10 +375,17 @@ data class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         // Expand labels using the DataDictionary type hierarchy.
         // E.g., if entity has label "Musician" and Musician extends Person,
         // the expanded labels will include both "Musician" and "Person".
+        // Filter to only include labels that are known domain types,
+        // excluding infrastructure labels (e.g., "Retrievable", "Embeddable")
+        // from framework interfaces in the type hierarchy.
+        val knownDomainLabels = dataDictionary.jvmTypes.map { it.ownLabel }.toSet()
         val expandedLabels = entity.labels().flatMap { label ->
-            dataDictionary.jvmTypes
-                .find { it.ownLabel == label }
-                ?.labels ?: setOf(label)
+            val jvmType = dataDictionary.jvmTypes.find { it.ownLabel == label }
+            if (jvmType != null) {
+                jvmType.labels.filter { it in knownDomainLabels }
+            } else {
+                setOf(label)
+            }
         }.toSet()
         val labels = (expandedLabels + properties.entityNodeName).distinct()
         logger.debug("Saved entity '{}' with labels: {} (expanded from {})", entity.name, labels, entity.labels())
