@@ -372,7 +372,15 @@ data class DrivineNamedEntityDataRepository @JvmOverloads constructor(
 
     override fun save(entity: NamedEntityData): NamedEntityData {
         logger.debug("Saving entity: id={}, name={}", entity.id, entity.name)
-        val labels = (entity.labels() + properties.entityNodeName).distinct()
+        // Expand labels using the DataDictionary type hierarchy.
+        // E.g., if entity has label "Musician" and Musician extends Person,
+        // the expanded labels will include both "Musician" and "Person".
+        val expandedLabels = entity.labels().flatMap { label ->
+            dataDictionary.jvmTypes
+                .find { it.ownLabel == label }
+                ?.labels ?: setOf(label)
+        }.toSet()
+        val labels = (expandedLabels + properties.entityNodeName).distinct()
         // MERGE only on base entity label + id to avoid creating duplicates when labels change.
         // Then SET additional labels separately.
         val additionalLabels = labels.filter { it != properties.entityNodeName }
