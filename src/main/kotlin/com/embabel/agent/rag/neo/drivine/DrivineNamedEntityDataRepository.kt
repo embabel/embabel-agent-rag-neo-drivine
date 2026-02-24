@@ -18,22 +18,21 @@ package com.embabel.agent.rag.neo.drivine
 import com.embabel.agent.core.DataDictionary
 import com.embabel.agent.filter.PropertyFilter
 import com.embabel.agent.rag.filter.EntityFilter
-import com.embabel.agent.rag.model.NamedEntity
 import com.embabel.agent.rag.model.NamedEntityData
 import com.embabel.agent.rag.model.RelationshipDirection
 import com.embabel.agent.rag.neo.drivine.mappers.NamedEntityDataRowMapper
 import com.embabel.agent.rag.neo.drivine.mappers.NamedEntityDataSimilarityMapper
 import com.embabel.agent.rag.service.NamedEntityDataRepository
+import com.embabel.agent.rag.service.NativeFinder
 import com.embabel.agent.rag.service.RelationshipData
 import com.embabel.agent.rag.service.RetrievableIdentifier
+import com.embabel.agent.rag.service.support.ChainedNativeFinder
 import com.embabel.common.ai.model.EmbeddingService
 import com.embabel.common.core.types.SimilarityResult
 import com.embabel.common.core.types.TextSimilaritySearchRequest
 import com.embabel.common.util.loggerFor
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import org.drivine.annotation.GraphView
-import org.drivine.annotation.NodeFragment
 import org.drivine.manager.GraphObjectManager
 import org.drivine.manager.PersistenceManager
 import org.drivine.mapper.RowMapper
@@ -87,9 +86,28 @@ data class DrivineNamedEntityDataRepository @JvmOverloads constructor(
      * Use 'n' as the node alias. Set via [narrowedBy] or [scopedToContext].
      */
     private val narrowingClause: String? = null,
+    private val additionalNativeFinder: NativeFinder = NativeFinder.NONE,
 ) : NamedEntityDataRepository {
 
     private val logger = loggerFor<DrivineNamedEntityDataRepository>()
+
+    override val nativeFinder: NativeFinder = run {
+        val drivine = graphObjectManager?.let { DrivineNativeFinder(it) }
+        when {
+            drivine != null && additionalNativeFinder !== NativeFinder.NONE ->
+                ChainedNativeFinder(drivine, additionalNativeFinder)
+            drivine != null -> drivine
+            additionalNativeFinder !== NativeFinder.NONE -> additionalNativeFinder
+            else -> NativeFinder.NONE
+        }
+    }
+
+    /**
+     * Return a copy with an additional [NativeFinder] chained after the built-in Drivine finder.
+     * Use this to provide custom native lookups for types not handled by Drivine.
+     */
+    fun withAdditionalNativeFinder(additional: NativeFinder): DrivineNamedEntityDataRepository =
+        copy(additionalNativeFinder = additional)
 
     init {
         if (verifyIndexes && narrowingClause == null) {
@@ -255,22 +273,6 @@ data class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         )
     }
 
-    override fun isNativeType(type: Class<*>): Boolean =
-        type.isAnnotationPresent(NodeFragment::class.java) ||
-                type.isAnnotationPresent(GraphView::class.java)
-
-    override fun <T : NamedEntity> findNativeAll(type: Class<T>): List<T>? {
-        if (!isNativeType(type)) return null
-        return graphObjectManager?.loadAll(type)
-    }
-
-    override fun <T : NamedEntity> findNativeById(
-        id: String,
-        type: Class<T>
-    ): T? {
-        if (!isNativeType(type)) return null
-        return graphObjectManager?.load(id, type)
-    }
 
     override fun findByLabel(label: String): List<NamedEntityData> {
         logger.debug("Finding entities by label: {}", label)

@@ -91,6 +91,7 @@ class DrivineStore @JvmOverloads constructor(
         createVectorIndex(properties.entityIndex, properties.entityNodeName)
         createFullTextIndex(properties.contentElementFullTextIndex, "Chunk", listOf("text"))
         createFullTextIndex(properties.entityFullTextIndex, properties.entityNodeName, listOf("name", "description"))
+        createUniqueConstraint(properties.entityNodeName, "id")
         logger.info("Provisioning complete")
     }
 
@@ -830,6 +831,14 @@ class DrivineStore @JvmOverloads constructor(
 //            return Result.failure(e)
 //        }
 //    }
+
+    private fun createUniqueConstraint(on: String, property: String) {
+        val name = "${on}_${property}_unique".lowercase()
+        val statement = """
+            CREATE CONSTRAINT `$name` IF NOT EXISTS
+            FOR (n:$on) REQUIRE n.$property IS UNIQUE"""
+        persistenceManager.execute(QuerySpecification.withStatement(statement))
+    }
 
     private fun createVectorIndex(
         name: String,
