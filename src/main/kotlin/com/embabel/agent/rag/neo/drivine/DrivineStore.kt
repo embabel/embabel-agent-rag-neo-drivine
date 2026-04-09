@@ -57,7 +57,7 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.support.TransactionTemplate
 
-class DrivineStore @JvmOverloads constructor(
+open class DrivineStore @JvmOverloads constructor(
     val persistenceManager: PersistenceManager,
     val properties: NeoRagServiceProperties,
     chunkerConfig: ContentChunker.Config,

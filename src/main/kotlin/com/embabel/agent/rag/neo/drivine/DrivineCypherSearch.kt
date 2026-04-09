@@ -34,7 +34,7 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.transaction.annotation.Transactional
 
-class DrivineCypherSearch @JvmOverloads constructor(
+open class DrivineCypherSearch @JvmOverloads constructor(
     private val persistenceManager: PersistenceManager,
     private val queryResolver: LogicalQueryResolver = FixedLocationLogicalQueryResolver(),
     private val namedEntityDataMapper: RowMapper<NamedEntityData> = NamedEntityDataRowMapper(),
