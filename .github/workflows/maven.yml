@@ -6,7 +6,7 @@
 # documentation.
 name: Build
 on:
-   repository_dispatch:
+  repository_dispatch:
     types: [agent-snapshots-deployed]
   push:
   pull_request:
