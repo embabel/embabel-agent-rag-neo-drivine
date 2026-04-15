@@ -42,8 +42,7 @@ import com.embabel.agent.rag.service.support.FunctionRagFacet
 import com.embabel.agent.rag.service.support.RagFacet
 import com.embabel.agent.rag.service.support.RagFacetProvider
 import com.embabel.agent.rag.service.support.RagFacetResults
-import com.embabel.agent.rag.store.AbstractChunkingContentElementRepository
-import com.embabel.agent.rag.store.ChunkingContentElementRepository
+import com.embabel.agent.rag.store.EmbeddingAwareChunkingContentElementRepository
 import com.embabel.agent.rag.store.ContentElementRepositoryInfo
 import com.embabel.agent.rag.store.DocumentDeletionResult
 import com.embabel.common.ai.model.EmbeddingService
@@ -69,11 +68,11 @@ class DrivineStore @JvmOverloads constructor(
     private val contentElementMapper: RowMapper<ContentElement> = DefaultContentElementRowMapper(),
     private val chunkFilterConverter: CypherFilterConverter = CypherFilterConverter(nodeAlias = "chunk"),
     private val queryResolver: LogicalQueryResolver = FixedLocationLogicalQueryResolver(),
-) : AbstractChunkingContentElementRepository(
+) : EmbeddingAwareChunkingContentElementRepository(
     chunkerConfig = chunkerConfig,
     chunkTransformer = chunkTransformer,
     embeddingService = embeddingService,
-), ChunkingContentElementRepository, RagFacetProvider,
+), RagFacetProvider,
     CoreSearchOperations, FilteringVectorSearch, FilteringTextSearch, ResultExpander {
 
     override val name get() = properties.name
@@ -239,12 +238,16 @@ class DrivineStore @JvmOverloads constructor(
         chunks: List<Chunk>,
         embeddings: Map<String, FloatArray>
     ) {
-        //TODO: Fix the !! below
-        chunks.forEach { chunk -> embedRetrievable(chunk, embeddings[chunk.id]!!) }
+        chunks.forEach { chunk ->
+            val embedding = requireNotNull(embeddings[chunk.id]) {
+                "Missing embedding for chunk ${chunk.id}"
+            }
+            embedRetrievable(chunk, embedding)
+        }
     }
 
     fun embeddingFor(text: String): Embedding =
-        embeddingService!!.embed(text)
+        embeddingService.embed(text)
 
     private fun embedRetrievable(
         retrievable: Retrievable,
@@ -261,7 +264,7 @@ class DrivineStore @JvmOverloads constructor(
             val params = mapOf(
                 "id" to retrievable.id,
                 "embedding" to embedding,
-                "embeddingModel" to embeddingService!!.name,
+                "embeddingModel" to embeddingService.name,
             )
             val result = cypherSearch.query(
                 purpose = "embedding",
@@ -848,7 +851,7 @@ class DrivineStore @JvmOverloads constructor(
             CREATE VECTOR INDEX `$name` IF NOT EXISTS
             FOR (n:$on) ON (n.embedding)
             OPTIONS {indexConfig: {
-            `vector.dimensions`: ${embeddingService!!.dimensions},
+            `vector.dimensions`: ${embeddingService.dimensions},
             `vector.similarity_function`: 'cosine'
             }}"""
 

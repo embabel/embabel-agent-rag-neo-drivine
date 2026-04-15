@@ -17,7 +17,7 @@
     <description>Neo4j RAG implementation using Drivine for Embabel Agent</description>
 
     <properties>
-        <embabel-agent.version>0.3.5-SNAPSHOT</embabel-agent.version>
+        <embabel-agent.version>0.4.0-SNAPSHOT</embabel-agent.version>
         <drivine.version>0.0.14</drivine.version>
     </properties>
 
