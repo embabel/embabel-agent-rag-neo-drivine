@@ -249,22 +249,36 @@ class DrivineStore @JvmOverloads constructor(
     fun embeddingFor(text: String): Embedding =
         embeddingService.embed(text)
 
+    /**
+     * Persist an embedding onto the node for [retrievable].
+     *
+     * Convention for "what was embedded": every embedded node carries the
+     * text it was embedded from, but we only write the explicit `_text`
+     * property when [Retrievable.embeddableValue] differs from the node's
+     * primary `text` field. For nodes whose `text` IS the embedded value
+     * (today: `:Chunk`, `:Proposition`), we skip `_text` to avoid storing
+     * a duplicate copy of the body. Reembed callers reconstruct the
+     * embedded value via `coalesce(n._text, n.text)`.
+     */
     private fun embedRetrievable(
         retrievable: Retrievable,
         embedding: Embedding,
     ) {
         try {
+            val embeddedText = retrievable.embeddableValue()
             val cypher = """
                 MERGE (n:${retrievable.labels().joinToString(":")} {id: ${'$'}id})
                 SET n.embedding = ${'$'}embedding,
                  n.embeddingModel = ${'$'}embeddingModel,
-                 n.embeddedAt = timestamp()
+                 n.embeddedAt = timestamp(),
+                 n._text = CASE WHEN coalesce(n.text, '') = ${'$'}embeddedText THEN null ELSE ${'$'}embeddedText END
                 RETURN {nodesUpdated: COUNT(n) }
                """.trimIndent()
             val params = mapOf(
                 "id" to retrievable.id,
                 "embedding" to embedding,
                 "embeddingModel" to embeddingService.name,
+                "embeddedText" to embeddedText,
             )
             val result = cypherSearch.query(
                 purpose = "embedding",
@@ -287,6 +301,92 @@ class DrivineStore @JvmOverloads constructor(
                 e,
             )
         }
+    }
+
+    /**
+     * Drop and recreate the vector indexes, re-embedding every Chunk and Entity
+     * that already has an embedding+text using whatever EmbeddingService is
+     * currently injected. Use this after swapping embedding models — vector
+     * indexes are dimension-bound and `IF NOT EXISTS` won't reconcile a dim
+     * change, so we drop + reprovision unconditionally.
+     */
+    fun reembedAll(): ReembedReport {
+        logger.info(
+            "reembedAll start. model={} dim={}",
+            embeddingService.name,
+            embeddingService.dimensions,
+        )
+        listOf(properties.contentElementIndex, properties.entityIndex).forEach { name ->
+            persistenceManager.execute(
+                QuerySpecification.withStatement("DROP INDEX `$name` IF EXISTS")
+            )
+            logger.info("Dropped vector index {}", name)
+        }
+        val chunks = reembedNodesWithLabel("Chunk")
+        val entities = reembedNodesWithLabel(properties.entityNodeName)
+        provision()
+        logger.info("reembedAll done. chunks={} entities={}", chunks, entities)
+        return ReembedReport(chunks = chunks, entities = entities)
+    }
+
+    private fun reembedNodesWithLabel(label: String): Int {
+        var total = 0
+        val pageSize = 200
+        val currentModel = embeddingService.name
+        while (true) {
+            val rows = cypherSearch.query(
+                purpose = "reembed-scan-$label",
+                query = """
+                    MATCH (n:$label)
+                    WHERE n.embedding IS NOT NULL
+                      AND coalesce(n._text, n.text) IS NOT NULL
+                      AND coalesce(n.embeddingModel, '') <> ${'$'}model
+                    RETURN n.id AS id, coalesce(n._text, n.text) AS text
+                    LIMIT ${'$'}limit
+                    """.trimIndent(),
+                params = mapOf("model" to currentModel, "limit" to pageSize),
+            ).items()
+            if (rows.isEmpty()) break
+
+            val texts = rows.map { it["text"] as String }
+            val vectors = embeddingService.embed(texts)
+            var successInPage = 0
+            rows.forEachIndexed { index, row ->
+                val id = row["id"] as String
+                val embeddedText = texts[index]
+                try {
+                    cypherSearch.query(
+                        purpose = "reembed-write-$label",
+                        query = """
+                            MATCH (n:$label {id: ${'$'}id})
+                            SET n.embedding = ${'$'}embedding,
+                                n.embeddingModel = ${'$'}embeddingModel,
+                                n.embeddedAt = timestamp(),
+                                n._text = CASE WHEN coalesce(n.text, '') = ${'$'}embeddedText THEN null ELSE ${'$'}embeddedText END
+                            """.trimIndent(),
+                        params = mapOf(
+                            "id" to id,
+                            "embedding" to vectors[index],
+                            "embeddingModel" to currentModel,
+                            "embeddedText" to embeddedText,
+                        ),
+                    )
+                    successInPage++
+                } catch (e: Exception) {
+                    logger.warn("Failed to re-embed {} id={}: {}", label, id, e.message)
+                }
+            }
+            total += successInPage
+            logger.info("Re-embedded {} {} nodes (running total {})", successInPage, label, total)
+            if (successInPage == 0) {
+                logger.warn(
+                    "No progress on {} re-embed; {} candidates remain unprocessed. Aborting loop.",
+                    label, rows.size,
+                )
+                break
+            }
+        }
+        return total
     }
 
     override fun expandResult(
@@ -886,3 +986,11 @@ class DrivineStore @JvmOverloads constructor(
 
 
 }
+
+/**
+ * Outcome of [DrivineStore.reembedAll].
+ */
+data class ReembedReport(
+    val chunks: Int,
+    val entities: Int,
+)

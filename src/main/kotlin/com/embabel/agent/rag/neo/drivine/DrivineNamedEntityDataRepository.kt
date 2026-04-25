@@ -372,6 +372,14 @@ data class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         return results
     }
 
+    /**
+     * NOTE: This method does not currently write `n.embedding`. The entity
+     * vector index is provisioned by [DrivineStore.provision] but no write
+     * path populates it yet. If you add embedding writes here, follow the
+     * `_text` convention documented on `DrivineStore.embedRetrievable`:
+     * persist `n._text = embeddableValue()` only when it differs from
+     * `n.text`, so reembed can replay via `coalesce(n._text, n.text)`.
+     */
     override fun save(entity: NamedEntityData): NamedEntityData {
         logger.debug("Saving entity: id={}, name={}", entity.id, entity.name)
         // Expand labels using the DataDictionary type hierarchy.
