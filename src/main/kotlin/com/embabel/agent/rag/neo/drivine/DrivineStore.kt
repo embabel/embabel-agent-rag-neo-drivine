@@ -266,12 +266,21 @@ class DrivineStore @JvmOverloads constructor(
     ) {
         try {
             val embeddedText = retrievable.embeddableValue()
+            // Use FOREACH-CASE-list rather than `SET ... = CASE WHEN ... THEN null END`
+            // for the conditional `_text`. The null-CASE form poisons the transaction
+            // in some Neo4j configurations; FOREACH iterating over [1]/[] is the
+            // canonical Cypher idiom for conditional writes and is portable.
             val cypher = """
                 MERGE (n:${retrievable.labels().joinToString(":")} {id: ${'$'}id})
                 SET n.embedding = ${'$'}embedding,
-                 n.embeddingModel = ${'$'}embeddingModel,
-                 n.embeddedAt = timestamp(),
-                 n._text = CASE WHEN coalesce(n.text, '') = ${'$'}embeddedText THEN null ELSE ${'$'}embeddedText END
+                    n.embeddingModel = ${'$'}embeddingModel,
+                    n.embeddedAt = timestamp()
+                FOREACH (x IN CASE WHEN coalesce(n.text, '') = ${'$'}embeddedText THEN [1] ELSE [] END |
+                    REMOVE n._text
+                )
+                FOREACH (x IN CASE WHEN coalesce(n.text, '') <> ${'$'}embeddedText THEN [1] ELSE [] END |
+                    SET n._text = ${'$'}embeddedText
+                )
                 RETURN {nodesUpdated: COUNT(n) }
                """.trimIndent()
             val params = mapOf(
@@ -361,8 +370,13 @@ class DrivineStore @JvmOverloads constructor(
                             MATCH (n:$label {id: ${'$'}id})
                             SET n.embedding = ${'$'}embedding,
                                 n.embeddingModel = ${'$'}embeddingModel,
-                                n.embeddedAt = timestamp(),
-                                n._text = CASE WHEN coalesce(n.text, '') = ${'$'}embeddedText THEN null ELSE ${'$'}embeddedText END
+                                n.embeddedAt = timestamp()
+                            FOREACH (x IN CASE WHEN coalesce(n.text, '') = ${'$'}embeddedText THEN [1] ELSE [] END |
+                                REMOVE n._text
+                            )
+                            FOREACH (x IN CASE WHEN coalesce(n.text, '') <> ${'$'}embeddedText THEN [1] ELSE [] END |
+                                SET n._text = ${'$'}embeddedText
+                            )
                             """.trimIndent(),
                         params = mapOf(
                             "id" to id,
