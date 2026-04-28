@@ -18,7 +18,7 @@
 
     <properties>
         <embabel-agent.version>0.4.0-SNAPSHOT</embabel-agent.version>
-        <drivine.version>0.0.14</drivine.version>
+        <drivine.version>0.0.38</drivine.version>
     </properties>
 
     <dependencyManagement>
@@ -100,6 +100,13 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Tika for HTML/document parsing in integration tests -->
+        <dependency>
+            <groupId>com.embabel.agent</groupId>
+            <artifactId>embabel-agent-rag-tika</artifactId>
             <scope>test</scope>
         </dependency>
 

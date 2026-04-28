@@ -5,8 +5,8 @@ name: $name,
 description: $description,
 createdDate: timestamp()
 })
-SET e += $properties,
-e.lastModifiedDate = timestamp()
+$($setClause)
+SET e.lastModifiedDate = timestamp()
 RETURN {
 id: e.id,
 nodesCreated: COUNT(e)

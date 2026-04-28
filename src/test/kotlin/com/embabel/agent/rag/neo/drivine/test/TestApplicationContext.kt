@@ -20,6 +20,7 @@ import com.embabel.agent.rag.ingestion.ContentChunker
 import com.embabel.agent.rag.neo.drivine.DrivineCypherSearch
 import com.embabel.agent.rag.neo.drivine.DrivineStore
 import com.embabel.agent.rag.neo.drivine.NeoRagServiceProperties
+import com.embabel.agent.rag.neo.drivine.dialect.Neo4jRagDialect
 import com.embabel.common.ai.model.SpringAiEmbeddingService
 import com.embabel.common.util.generateRandomFloatArray
 import org.drivine.autoconfigure.EnableDrivine
@@ -64,7 +65,7 @@ import java.util.*
             RagShellCommands::class,
             RagChatActions::class,
             DrivineCypherSearch::class,
-            DrivineStore::class
+            DrivineStore::class,
         ]
     )]
 )
@@ -96,6 +97,7 @@ class TestAppContext {
             chunkTransformer = ChunkTransformer.NO_OP,
             platformTransactionManager = transactionManager,
             cypherSearch = cypherSearch,
+            dialect = Neo4jRagDialect(),
             embeddingService = SpringAiEmbeddingService("fake", "embabel", FakeEmbeddingModel())
         )
     }

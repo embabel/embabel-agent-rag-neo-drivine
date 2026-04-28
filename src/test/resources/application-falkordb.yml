@@ -1,0 +1,13 @@
+# FalkorDB test profile
+# Activate with @ActiveProfiles("falkordb")
+# Uses testcontainer by default; set USE_LOCAL_FALKORDB=true for local instance
+
+database:
+  datasources:
+    neo:
+      type: FALKORDB
+      host: localhost
+      port: 6379
+      user-name: ""
+      password: ""
+      database-name: neo4j

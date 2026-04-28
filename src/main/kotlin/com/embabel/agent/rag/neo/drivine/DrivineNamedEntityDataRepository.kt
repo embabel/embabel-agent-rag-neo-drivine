@@ -199,19 +199,21 @@ data class DrivineNamedEntityDataRepository @JvmOverloads constructor(
             a.type, a.id, relationship.name, b.type, b.id
         )
         val statement = resolveQuery("create_named_entity_relationship")
-        val params = mapOf(
-            "fromId" to a.id,
-            "fromType" to a.type,
-            "toId" to b.id,
-            "toType" to b.type,
-            "relType" to relationship.name,
-            "relProperties" to relationship.properties,
-        )
-
+        val relProps = relationship.properties.filterValues { it != null }
+        val (setClause, relBindParams) = flattenToSetClause("r", relProps)
         persistenceManager.execute(
             QuerySpecification
                 .withStatement(statement)
-                .bind(params)
+                .render(mapOf(
+                    "relType" to relationship.name,
+                    "setClause" to setClause,
+                ))
+                .bind(mapOf(
+                    "fromId" to a.id,
+                    "fromType" to a.type,
+                    "toId" to b.id,
+                    "toType" to b.type,
+                ) + relBindParams)
         )
         logger.debug("Created relationship: ({} {})-[:{}]->({} {})", a.type, a.id, relationship.name, b.type, b.id)
     }
@@ -226,19 +228,21 @@ data class DrivineNamedEntityDataRepository @JvmOverloads constructor(
             a.type, a.id, relationship.name, b.type, b.id
         )
         val statement = resolveQuery("merge_named_entity_relationship")
-        val params = mapOf(
-            "fromId" to a.id,
-            "fromType" to a.type,
-            "toId" to b.id,
-            "toType" to b.type,
-            "relType" to relationship.name,
-            "relProperties" to relationship.properties,
-        )
-
+        val relProps = relationship.properties.filterValues { it != null }
+        val (setClause, relBindParams) = flattenToSetClause("r", relProps)
         persistenceManager.execute(
             QuerySpecification
                 .withStatement(statement)
-                .bind(params)
+                .render(mapOf(
+                    "relType" to relationship.name,
+                    "setClause" to setClause,
+                ))
+                .bind(mapOf(
+                    "fromId" to a.id,
+                    "fromType" to a.type,
+                    "toId" to b.id,
+                    "toType" to b.type,
+                ) + relBindParams)
         )
         logger.debug("Merged relationship: ({} {})-[:{}]->({} {})", a.type, a.id, relationship.name, b.type, b.id)
     }
@@ -407,13 +411,15 @@ data class DrivineNamedEntityDataRepository @JvmOverloads constructor(
         } else {
             ""
         }
+        val entityProps = entity.properties.filterValues { it != null }
+        val (setPropsClause, propBindParams) = flattenToSetClause("e", entityProps)
         val statement = """
             MERGE (e:${properties.entityNodeName} {id: ${'$'}id})
             $setLabelsClause
             SET e.name = ${'$'}name,
                 e.description = ${'$'}description,
                 e.lastModifiedDate = timestamp()
-            SET e += ${'$'}properties
+            $setPropsClause
             RETURN {
                 id: e.id,
                 name: e.name,
@@ -427,8 +433,7 @@ data class DrivineNamedEntityDataRepository @JvmOverloads constructor(
             "id" to entity.id,
             "name" to entity.name,
             "description" to entity.description,
-            "properties" to entity.properties,
-        )
+        ) + propBindParams
 
         return persistenceManager.getOne(
             QuerySpecification

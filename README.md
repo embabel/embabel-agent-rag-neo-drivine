@@ -1,26 +1,35 @@
 # Embabel RAG Neo4j Drivine
 
-Neo4j RAG (Retrieval-Augmented Generation) implementation using Drivine for the Embabel Agent framework.
+RAG (Retrieval-Augmented Generation) implementation for graph databases using Drivine, part of the Embabel Agent framework.
 
 ## Overview
-  
-This module provides a Neo4j-based implementation of the RAG pattern using Drivine4j, a lightweight Neo4j driver for Java/Kotlin. It includes:
 
-- **CypherSearch**: Interface for executing Cypher queries and retrieving results
-- **DrivineCypherSearch**: Main implementation using Drivine for Neo4j operations
-- **DrivineStore**: Content element repository for storing and retrieving documents and chunks
+This module provides a graph-database-backed implementation of the RAG pattern using Drivine4j. It supports **Neo4j**, **FalkorDB**, and **Neptune Analytics** through a dialect abstraction that handles the Cypher differences between engines.
+
+### Key Components
+
+- **DrivineStore**: Content element repository for storing and retrieving documents, chunks, and embeddings
+- **RagDialect**: Strategy interface for database-specific operations (index creation, vector search, fulltext search, embedding storage)
+- **CypherSearch / DrivineCypherSearch**: Cypher query execution layer
 - **LogicalQueryResolver**: Resolves logical query names to Cypher query files
-- **Mappers**: Row mappers for converting Neo4j query results to domain objects
-  - `ContentElementMapper`: Maps to ContentElement (Document/Chunk)
-  - `EntityDataMapper`: Maps to EntityData
-  - `EntityDataSimilarityMapper`: Maps to similarity search results for entities
-  - `ChunkSimilarityMapper`: Maps to similarity search results for chunks
+- **Mappers**: Row mappers for converting query results to domain objects
+
+### Supported Databases
+
+| Feature | Neo4j | FalkorDB | Neptune Analytics |
+|---|---|---|---|
+| Vector index creation | `CREATE VECTOR INDEX` | `CREATE VECTOR INDEX` | Defined at graph creation via AWS API |
+| Vector search | `db.index.vector.queryNodes` | `db.idx.vector.queryNodes` + `vecf32()` | `neptune.algo.vectors.topKByEmbedding` |
+| Fulltext index | `CREATE FULLTEXT INDEX` | `db.idx.fulltext.createNodeIndex` | Not supported |
+| Fulltext search | `db.index.fulltext.queryNodes` | `db.idx.fulltext.queryNodes` | Not supported |
+| Unique constraints | `CREATE CONSTRAINT` | `GRAPH.CONSTRAINT CREATE` (Redis) | Not supported (engine-level ID uniqueness only) |
+| Embedding storage | Node property | Node property | `neptune.algo.vectors.upsert()` (not ACID) |
 
 ## Dependencies
 
-- **Drivine4j**: Lightweight Neo4j driver
+- **Drivine4j** (0.0.30+): Graph database driver with Neo4j, FalkorDB, and Neptune support
 - **Embabel Agent RAG Pipeline**: Core RAG abstractions and interfaces
-- **Spring Boot**: For dependency injection and transaction management
+- **Spring Boot**: Dependency injection and transaction management
 - **Kotlin**: Implementation language
 
 ## Usage
@@ -31,36 +40,76 @@ Add this dependency to your project:
 <dependency>
     <groupId>com.embabel.agent</groupId>
     <artifactId>embabel-rag-neo-drivine</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.2-SNAPSHOT</version>
 </dependency>
 ```
 
-## Configuration
+### Selecting a Dialect
 
-Configure Neo4j connection properties in your application configuration:
+The dialect is resolved from Drivine's `DatabaseType`:
 
-```yaml
-neo-rag-service:
-  cypher-directory: classpath:cypher
+```kotlin
+import com.embabel.agent.rag.neo.drivine.dialect.RagDialect
+import org.drivine.connection.DatabaseType
+
+val dialect = RagDialect.forDatabaseType(DatabaseType.FALKORDB)
 ```
 
-## Cypher Queries
+Pass it when constructing `DrivineStore`:
 
-Cypher query files are located in `src/main/resources/cypher/`:
+```kotlin
+DrivineStore(
+    persistenceManager = persistenceManager,
+    properties = properties,
+    cypherSearch = cypherSearch,
+    dialect = dialect,
+    // ...
+)
+```
 
-- `chunk_vector_search.cypher`: Vector similarity search for chunks
-- `entity_vector_search.cypher`: Vector similarity search for entities
-- `chunk_fulltext_search.cypher`: Full-text search for chunks
-- `entity_fulltext_search.cypher`: Full-text search for entities
-- `vector_cluster.cypher`: Clustering based on vector similarity
-- `save_content_element.cypher`: Save documents and chunks
-- `create_entity.cypher`: Create named entities
-- `delete_document_and_descendants.cypher`: Delete documents and their chunks
-- And more...
+If no dialect is specified, `Neo4jRagDialect` is used by default.
+
+## Configuration
+
+Configure connection and RAG properties in your application configuration:
+
+```yaml
+database:
+  datasources:
+    neo:
+      type: NEO4J          # or FALKORDB, NEPTUNE
+      host: localhost
+      port: 7687
+      user-name: neo4j
+      password: secret
+      database-name: neo4j
+
+embabel:
+  agent:
+    rag:
+      neo:
+        content-element-index: embabel_content_index
+        entity-index: embabel_entity_index
+        content-element-full-text-index: embabel_content_fulltext_index
+        entity-full-text-index: embabel_entity_fulltext_index
+```
+
+### Neptune Analytics Notes
+
+- Vector indexes are defined at graph creation time through the AWS API; `provision()` skips index creation.
+- Vector dimensions are fixed at graph creation and cannot be changed without recreating the graph.
+- Embedding updates via `neptune.algo.vectors.upsert()` are not ACID -- there is a window where just-ingested content is not yet searchable.
+- No fulltext search. No property-level unique constraints.
+
+### FalkorDB Notes
+
+- Unique constraints require the Redis command `GRAPH.CONSTRAINT CREATE`, which must be issued through the FalkorDB driver directly (not via Cypher).
+- The `vecf32()` wrapper is required around vector parameters in search queries (handled by the dialect).
+- Fulltext index creation supports one property at a time.
 
 ## Testing
 
-The module includes integration tests using Testcontainers for Neo4j:
+Integration tests use Testcontainers (Neo4j by default; FalkorDB and Memgraph are activated via the `falkordb` and `memgraph` Spring profiles):
 
 ```bash
 mvn test

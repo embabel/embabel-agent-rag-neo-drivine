@@ -49,6 +49,8 @@ import com.embabel.common.ai.model.EmbeddingService
 import com.embabel.common.core.types.SimilarityCutoff
 import com.embabel.common.core.types.SimilarityResult
 import com.embabel.common.core.types.TextSimilaritySearchRequest
+import com.embabel.agent.rag.neo.drivine.dialect.Neo4jRagDialect
+import com.embabel.agent.rag.neo.drivine.dialect.RagDialect
 import org.drivine.manager.PersistenceManager
 import org.drivine.mapper.RowMapper
 import org.drivine.query.QuerySpecification
@@ -64,6 +66,7 @@ class DrivineStore @JvmOverloads constructor(
     embeddingService: EmbeddingService,
     platformTransactionManager: PlatformTransactionManager,
     private val cypherSearch: CypherSearch,
+    private val dialect: RagDialect = Neo4jRagDialect(),
     override val enhancers: List<RetrievableEnhancer> = emptyList(),
     private val contentElementMapper: RowMapper<ContentElement> = DefaultContentElementRowMapper(),
     private val chunkFilterConverter: CypherFilterConverter = CypherFilterConverter(nodeAlias = "chunk"),
@@ -84,13 +87,24 @@ class DrivineStore @JvmOverloads constructor(
     }
 
     override fun provision() {
-        logger.info("Provisioning with properties {}", properties)
-        // TODO do we want this on ContentElement?
-        createVectorIndex(properties.contentElementIndex, "Chunk")
-        createVectorIndex(properties.entityIndex, properties.entityNodeName)
-        createFullTextIndex(properties.contentElementFullTextIndex, "Chunk", listOf("text"))
-        createFullTextIndex(properties.entityFullTextIndex, properties.entityNodeName, listOf("name", "description"))
-        createUniqueConstraint(properties.entityNodeName, "id")
+        logger.info("Provisioning with dialect '{}', properties {}", dialect.name, properties)
+
+        dialect.createVectorIndex(
+            persistenceManager, properties.contentElementIndex, "Chunk",
+            embeddingService.dimensions, "cosine",
+        )
+        dialect.createVectorIndex(
+            persistenceManager, properties.entityIndex, properties.entityNodeName,
+            embeddingService.dimensions, "cosine",
+        )
+        dialect.createFullTextIndex(
+            persistenceManager, properties.contentElementFullTextIndex, "Chunk", listOf("text"),
+        )
+        dialect.createFullTextIndex(
+            persistenceManager, properties.entityFullTextIndex, properties.entityNodeName, listOf("name", "description"),
+        )
+        dialect.createUniqueConstraint(persistenceManager, properties.entityNodeName, "id")
+
         logger.info("Provisioning complete")
     }
 
@@ -266,23 +280,7 @@ class DrivineStore @JvmOverloads constructor(
     ) {
         try {
             val embeddedText = retrievable.embeddableValue()
-            // Use FOREACH-CASE-list rather than `SET ... = CASE WHEN ... THEN null END`
-            // for the conditional `_text`. The null-CASE form poisons the transaction
-            // in some Neo4j configurations; FOREACH iterating over [1]/[] is the
-            // canonical Cypher idiom for conditional writes and is portable.
-            val cypher = """
-                MERGE (n:${retrievable.labels().joinToString(":")} {id: ${'$'}id})
-                SET n.embedding = ${'$'}embedding,
-                    n.embeddingModel = ${'$'}embeddingModel,
-                    n.embeddedAt = timestamp()
-                FOREACH (x IN CASE WHEN coalesce(n.text, '') = ${'$'}embeddedText THEN [1] ELSE [] END |
-                    REMOVE n._text
-                )
-                FOREACH (x IN CASE WHEN coalesce(n.text, '') <> ${'$'}embeddedText THEN [1] ELSE [] END |
-                    SET n._text = ${'$'}embeddedText
-                )
-                RETURN {nodesUpdated: COUNT(n) }
-               """.trimIndent()
+            val cypher = dialect.storeEmbeddingCypher(retrievable.labels().joinToString(":"))
             val params = mapOf(
                 "id" to retrievable.id,
                 "embedding" to embedding,
@@ -596,14 +594,20 @@ class DrivineStore @JvmOverloads constructor(
     }
 
     override fun save(element: ContentElement): ContentElement {
-        cypherSearch.query(
-            "Save element",
-            query = "save_content_element",
-            params = mapOf(
-                "id" to element.id,
-                "labels" to element.labels(),
-                "properties" to element.propertiesToPersist(),
-            )
+        val cypher = queryResolver.resolve("save_content_element")
+            ?: error("Could not load save_content_element.cypher")
+        val additionalLabels = element.labels().filter { it != "ContentElement" }
+        val properties = element.propertiesToPersist().filterValues { it != null }
+        val (setClause, bindParams) = flattenToSetClause("e", properties)
+        persistenceManager.query(
+            QuerySpecification
+                .withStatement(cypher)
+                .render(mapOf(
+                    "additionalLabels" to additionalLabels,
+                    "setClause" to setClause,
+                ))
+                .bind(mapOf("id" to element.id) + bindParams)
+                .transform(Map::class.java)
         )
         return element
     }
@@ -702,9 +706,10 @@ class DrivineStore @JvmOverloads constructor(
     ): List<SimilarityResult<Chunk>> {
         val results = cypherSearch.chunkSimilaritySearch(
             "Chunk similarity search",
-            query = "chunk_vector_search",
+            query = dialect.chunkVectorSearchCypher(),
             params = commonParameters(request) + mapOf(
                 "vectorIndex" to properties.contentElementIndex,
+                "chunkLabel" to properties.chunkNodeName,
                 "queryVector" to embedding,
             ),
             logger = logger,
@@ -713,14 +718,21 @@ class DrivineStore @JvmOverloads constructor(
         return results
     }
 
+    // TODO remove .cypher files (e.g. chunk_vector_search.cypher) once dialect queries are proven out
     internal fun chunkFullTextSearch(
         request: TextSimilaritySearchRequest,
     ): List<SimilarityResult<out Chunk>> {
+        val queryTemplate = dialect.chunkFullTextSearchCypher()
+        if (queryTemplate == null) {
+            logger.info("Fulltext search not supported by dialect '{}', skipping", dialect.name)
+            return emptyList()
+        }
         val results = cypherSearch.chunkFullTextSearch(
             purpose = "Chunk full text search",
-            query = "chunk_fulltext_search",
+            query = queryTemplate,
             params = commonParameters(request) + mapOf(
                 "fulltextIndex" to properties.contentElementFullTextIndex,
+                "chunkLabel" to properties.chunkNodeName,
                 "searchText" to "\"${request.query}\"",
             ),
             logger = logger,
@@ -733,11 +745,16 @@ class DrivineStore @JvmOverloads constructor(
         request: TextSimilaritySearchRequest,
         clazz: Class<T>
     ): List<SimilarityResult<T>> {
+        val queryTemplate = dialect.chunkFullTextSearchCypher()
+            ?: throw UnsupportedOperationException(
+                "Fulltext search is not supported by the ${dialect.name} dialect"
+            )
         val results = cypherSearch.chunkFullTextSearch(
             purpose = "Chunk full text search",
-            query = "chunk_fulltext_search",
+            query = queryTemplate,
             params = commonParameters(request) + mapOf(
                 "fulltextIndex" to properties.contentElementFullTextIndex,
+                "chunkLabel" to properties.chunkNodeName,
                 "searchText" to request.query,
             ),
             logger = logger,
@@ -781,11 +798,16 @@ class DrivineStore @JvmOverloads constructor(
             "Performing text search with filter: query='{}', topK={}, metadataFilter={}, propertyFilter={}",
             request.query, request.topK, metadataFilter, entityFilter
         )
+        val queryTemplate = dialect.chunkFullTextSearchCypher()
+            ?: throw UnsupportedOperationException(
+                "Fulltext search is not supported by the ${dialect.name} dialect"
+            )
         val results = cypherSearch.chunkFullTextSearchWithFilter(
             purpose = "Chunk full text search with filter",
-            query = "chunk_fulltext_search",
+            query = queryTemplate,
             params = commonParameters(request) + mapOf(
                 "fulltextIndex" to properties.contentElementFullTextIndex,
+                "chunkLabel" to properties.chunkNodeName,
                 "searchText" to request.query,
             ),
             filterResult = filterResult,
@@ -822,9 +844,10 @@ class DrivineStore @JvmOverloads constructor(
     ): List<SimilarityResult<Chunk>> {
         val results = cypherSearch.chunkSimilaritySearchWithFilter(
             "Chunk similarity search with filter",
-            query = "chunk_vector_search",
+            query = dialect.chunkVectorSearchCypher(),
             params = commonParameters(request) + mapOf(
                 "vectorIndex" to properties.contentElementIndex,
+                "chunkLabel" to properties.chunkNodeName,
                 "queryVector" to embedding,
             ),
             filterResult = filterResult,
@@ -847,16 +870,23 @@ class DrivineStore @JvmOverloads constructor(
         )
         allEntityResults += entityResults
         logger.info("{} entity vector results for query '{}'", entityResults.size, ragRequest.query)
-        val entityFullTextResults = cypherSearch.entityFullTextSearch(
-            purpose = "Entity full text search",
-            query = "entity_fulltext_search",
-            params = commonParameters(ragRequest) + mapOf(
-                "fulltextIndex" to properties.entityFullTextIndex,
-                "searchText" to ragRequest.query,
-                "labels" to labels,
-            ),
-            logger = logger,
-        )
+        val entityFullTextQuery = dialect.entityFullTextSearchCypher()
+        val entityFullTextResults = if (entityFullTextQuery != null) {
+            cypherSearch.entityFullTextSearch(
+                purpose = "Entity full text search",
+                query = entityFullTextQuery,
+                params = commonParameters(ragRequest) + mapOf(
+                    "fulltextIndex" to properties.entityFullTextIndex,
+                    "entityNodeName" to properties.entityNodeName,
+                    "searchText" to ragRequest.query,
+                    "labels" to labels,
+                ),
+                logger = logger,
+            )
+        } else {
+            logger.info("Entity fulltext search not supported by dialect '{}', skipping", dialect.name)
+            emptyList()
+        }
         logger.info("{} entity full-text results for query '{}'", entityFullTextResults.size, ragRequest.query)
         allEntityResults += entityFullTextResults
 
@@ -880,9 +910,10 @@ class DrivineStore @JvmOverloads constructor(
     ): List<SimilarityResult<out NamedEntityData>> {
         return cypherSearch.entityDataSimilaritySearch(
             purpose = "Mapped entity search",
-            query = "entity_vector_search",
+            query = dialect.entityVectorSearchCypher(),
             params = commonParameters(request) + mapOf(
                 "index" to properties.entityIndex,
+                "entityNodeName" to properties.entityNodeName,
                 "queryVector" to embedding,
                 "labels" to labels,
             ),
@@ -949,56 +980,10 @@ class DrivineStore @JvmOverloads constructor(
 //        }
 //    }
 
-    private fun createUniqueConstraint(on: String, property: String) {
-        val name = "${on}_${property}_unique".lowercase()
-        val statement = """
-            CREATE CONSTRAINT `$name` IF NOT EXISTS
-            FOR (n:$on) REQUIRE n.$property IS UNIQUE"""
-        persistenceManager.execute(QuerySpecification.withStatement(statement))
-    }
-
-    private fun createVectorIndex(
-        name: String,
-        on: String,
-    ) {
-        val statement = """
-            CREATE VECTOR INDEX `$name` IF NOT EXISTS
-            FOR (n:$on) ON (n.embedding)
-            OPTIONS {indexConfig: {
-            `vector.dimensions`: ${embeddingService.dimensions},
-            `vector.similarity_function`: 'cosine'
-            }}"""
-
-        persistenceManager.execute(QuerySpecification.withStatement(statement))
-
-    }
-
-    private fun createFullTextIndex(
-        name: String,
-        on: String,
-        properties: List<String>,
-    ) {
-        val propertiesString = properties.joinToString(", ") { "n.$it" }
-        val statement = """|
-                |CREATE FULLTEXT INDEX `$name` IF NOT EXISTS
-                |FOR (n:$on) ON EACH [$propertiesString]
-                |OPTIONS {
-                |indexConfig: {
-                |
-                |   }
-                |}
-                """.trimMargin()
-        persistenceManager.execute(QuerySpecification.withStatement(statement))
-        logger.info("Created full-text index {} for {} on properties {}", name, on, properties)
-    }
-
-
     private fun commonParameters(request: SimilarityCutoff) = mapOf(
         "topK" to request.topK,
         "similarityThreshold" to request.similarityThreshold,
     )
-
-
 }
 
 /**

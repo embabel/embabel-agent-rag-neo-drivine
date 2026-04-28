@@ -1,7 +1,5 @@
 MERGE (e:ContentElement {id: $id})
-SET e += $properties,
-  e.lastModifiedDate = timestamp()
-WITH e
-CALL apoc.create.addLabels(e, $labels)
-YIELD node
+SET e:$($additionalLabels)
+$($setClause)
+SET e.lastModifiedDate = timestamp()
 RETURN properties(e)

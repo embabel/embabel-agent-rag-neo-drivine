@@ -1,0 +1,13 @@
+# Memgraph test profile
+# Activate with @ActiveProfiles("memgraph")
+# Uses DatabaseType.NEO4J since Memgraph speaks Bolt protocol
+
+database:
+  datasources:
+    neo:
+      type: NEO4J
+      host: localhost
+      port: 7688
+      user-name: ""
+      password: ""
+      database-name: memgraph

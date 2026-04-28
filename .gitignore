@@ -41,3 +41,6 @@ build/
 .envrc
 .env
 .claude
+
+## Jackknife (jar exploration cache)
+.jackknife/

@@ -48,22 +48,32 @@ class DrivineCypherSearch @JvmOverloads constructor(
         entity: NamedEntityData,
         basis: Retrievable,
     ): String {
-        val params = mapOf(
-            "id" to entity.id,
-            "name" to entity.name,
-            "description" to entity.description,
-            "basisId" to basis.id,
-            "properties" to entity.properties,
-            "chunkNodeName" to "Chunk",
-            "entityLabels" to entity.labels(),
-        )
-        val result = query(
-            purpose = "Create entity",
-            query = "create_entity",
-            params = params,
-            logger = logger,
-        )
-        val singleRow = result.singleOrNull() ?: error("No result returned from create_entity")
+        val cypher = queryResolver.resolve("create_entity")
+            ?: error("Could not load create_entity.cypher")
+        logger.info("[Create entity] query\n\tparams: entity={}, basis={}\n{}", entity.labels(), basis.id, cypher)
+
+        val entityProps = entity.properties.filterValues { it != null }
+        val (setClause, propBindParams) = flattenToSetClause("e", entityProps)
+
+        @Suppress("UNCHECKED_CAST")
+        val rows = persistenceManager.query(
+            QuerySpecification
+                .withStatement(cypher)
+                .render(mapOf(
+                    "chunkNodeName" to "Chunk",
+                    "entityLabels" to entity.labels().toList(),
+                    "setClause" to setClause,
+                ))
+                .bind(mapOf(
+                    "id" to entity.id,
+                    "name" to entity.name,
+                    "description" to entity.description,
+                    "basisId" to basis.id,
+                ) + propBindParams)
+                .transform(Map::class.java)
+        ) as List<Map<String, Any>>
+
+        val singleRow = rows.singleOrNull() ?: error("No result returned from create_entity")
         val id = singleRow["id"] as? String ?: error("No id returned from create_entity")
         logger.info("Created entity {} with id: {}", entity.labels(), id)
         return id
