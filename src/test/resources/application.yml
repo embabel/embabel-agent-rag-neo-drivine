@@ -9,7 +9,7 @@ test:
     use-local: false
 database:
   datasources:
-    neo:
+    graph:
       type: NEO4J
       host: localhost
       port: 7687
@@ -27,11 +27,11 @@ spring:
       version:
         enabled: false
 
-# Neo4j RAG configuration
+# Graph RAG configuration
 embabel:
   agent:
     rag:
-      neo:
+      graph:
         uri: ${NEO4J_URI:bolt://localhost:7687}
         username: ${NEO4J_USERNAME:neo4j}
         password: ${NEO4J_PASSWORD:brahmsian}

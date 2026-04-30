@@ -4,7 +4,7 @@
 
 database:
   datasources:
-    neo:
+    graph:
       type: NEO4J
       host: localhost
       port: 7688

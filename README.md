@@ -1,10 +1,10 @@
-# Embabel RAG Neo4j Drivine
+# Embabel RAG Graph
 
 RAG (Retrieval-Augmented Generation) implementation for graph databases using Drivine, part of the Embabel Agent framework.
 
 ## Overview
 
-This module provides a graph-database-backed implementation of the RAG pattern using Drivine4j. It supports **Neo4j**, **FalkorDB**, and **Neptune Analytics** through a dialect abstraction that handles the Cypher differences between engines.
+This module provides a graph-database-backed implementation of the RAG pattern using Drivine4j. It supports **Neo4j**, **FalkorDB**, and **Memgraph** through a dialect abstraction that handles the Cypher differences between engines.
 
 ### Key Components
 
@@ -16,18 +16,18 @@ This module provides a graph-database-backed implementation of the RAG pattern u
 
 ### Supported Databases
 
-| Feature | Neo4j | FalkorDB | Neptune Analytics |
-|---|---|---|---|
-| Vector index creation | `CREATE VECTOR INDEX` | `CREATE VECTOR INDEX` | Defined at graph creation via AWS API |
-| Vector search | `db.index.vector.queryNodes` | `db.idx.vector.queryNodes` + `vecf32()` | `neptune.algo.vectors.topKByEmbedding` |
-| Fulltext index | `CREATE FULLTEXT INDEX` | `db.idx.fulltext.createNodeIndex` | Not supported |
-| Fulltext search | `db.index.fulltext.queryNodes` | `db.idx.fulltext.queryNodes` | Not supported |
-| Unique constraints | `CREATE CONSTRAINT` | `GRAPH.CONSTRAINT CREATE` (Redis) | Not supported (engine-level ID uniqueness only) |
-| Embedding storage | Node property | Node property | `neptune.algo.vectors.upsert()` (not ACID) |
+| Feature | Neo4j | FalkorDB |
+|---|---|---|
+| Vector index creation | `CREATE VECTOR INDEX` | `CREATE VECTOR INDEX` |
+| Vector search | `db.index.vector.queryNodes` | `db.idx.vector.queryNodes` + `vecf32()` |
+| Fulltext index | `CREATE FULLTEXT INDEX` | `db.idx.fulltext.createNodeIndex` |
+| Fulltext search | `db.index.fulltext.queryNodes` | `db.idx.fulltext.queryNodes` |
+| Unique constraints | `CREATE CONSTRAINT` | `GRAPH.CONSTRAINT CREATE` (Redis) |
+| Embedding storage | Node property | Node property |
 
 ## Dependencies
 
-- **Drivine4j** (0.0.30+): Graph database driver with Neo4j, FalkorDB, and Neptune support
+- **Drivine4j** (0.0.30+): Graph database driver with Neo4j and FalkorDB support
 - **Embabel Agent RAG Pipeline**: Core RAG abstractions and interfaces
 - **Spring Boot**: Dependency injection and transaction management
 - **Kotlin**: Implementation language
@@ -39,8 +39,8 @@ Add this dependency to your project:
 ```xml
 <dependency>
     <groupId>com.embabel.agent</groupId>
-    <artifactId>embabel-rag-neo-drivine</artifactId>
-    <version>0.1.2-SNAPSHOT</version>
+    <artifactId>embabel-agent-rag-graph</artifactId>
+    <version>0.2.0-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -49,7 +49,7 @@ Add this dependency to your project:
 The dialect is resolved from Drivine's `DatabaseType`:
 
 ```kotlin
-import com.embabel.agent.rag.neo.drivine.dialect.RagDialect
+import com.embabel.agent.rag.graph.dialect.RagDialect
 import org.drivine.connection.DatabaseType
 
 val dialect = RagDialect.forDatabaseType(DatabaseType.FALKORDB)
@@ -76,8 +76,8 @@ Configure connection and RAG properties in your application configuration:
 ```yaml
 database:
   datasources:
-    neo:
-      type: NEO4J          # or FALKORDB, NEPTUNE
+    graph:
+      type: NEO4J          # or FALKORDB, MEMGRAPH
       host: localhost
       port: 7687
       user-name: neo4j
@@ -87,19 +87,12 @@ database:
 embabel:
   agent:
     rag:
-      neo:
+      graph:
         content-element-index: embabel_content_index
         entity-index: embabel_entity_index
         content-element-full-text-index: embabel_content_fulltext_index
         entity-full-text-index: embabel_entity_fulltext_index
 ```
-
-### Neptune Analytics Notes
-
-- Vector indexes are defined at graph creation time through the AWS API; `provision()` skips index creation.
-- Vector dimensions are fixed at graph creation and cannot be changed without recreating the graph.
-- Embedding updates via `neptune.algo.vectors.upsert()` are not ACID -- there is a window where just-ingested content is not yet searchable.
-- No fulltext search. No property-level unique constraints.
 
 ### FalkorDB Notes
 
